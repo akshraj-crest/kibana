@@ -9,7 +9,7 @@
 
 import type { ActionContext } from '../../connector_spec';
 import { GoogleThreatIntelligenceConnector } from './google_threat_intelligence';
-import { GetFileBehavioursInputSchema } from './types';
+import { GetFileBehavioursInputSchema, GetFileMitreAttackTechniquesInputSchema } from './types';
 
 const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
 
@@ -124,6 +124,74 @@ describe('GoogleThreatIntelligenceConnector', () => {
       const result = await handler(mockContext, { fileHash: SHA256_HASH });
 
       expect(result).toEqual({ data: [], meta: { count: 0 } });
+    });
+
+    it('throws on a 404 (hash unknown to GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: `File "${SHA256_HASH}" not found` } },
+        },
+      });
+
+      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow(
+        `GTI API error (404): File "${SHA256_HASH}" not found`
+      );
+    });
+
+    it('throws on a bare network error with no response envelope', async () => {
+      mockClient.get.mockRejectedValue(new Error('ECONNREFUSED'));
+
+      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow('ECONNREFUSED');
+    });
+  });
+
+  describe('getFileMitreAttackTechniques', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getFileMitreAttackTechniques.handler;
+
+    it('rejects a malformed hash at the schema level, before the handler runs', () => {
+      const result = GetFileMitreAttackTechniquesInputSchema.safeParse({ fileHash: 'test' });
+      expect(result.success).toBe(false);
+    });
+
+    it('calls the behaviour_mitre_trees endpoint with the hash and x-tool header, and returns the sandbox-keyed data as-is', async () => {
+      const apiResponse = {
+        data: {
+          Zenbox: {
+            tactics: [
+              {
+                id: 'TA0005',
+                name: 'Stealth',
+                techniques: [
+                  {
+                    id: 'T1027',
+                    name: 'Obfuscated Files or Information',
+                    signatures: [{ severity: 'INFO', description: 'encode data using XOR' }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { fileHash: SHA256_HASH });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(
+        `https://www.virustotal.com/api/v3/files/${SHA256_HASH}/behaviour_mitre_trees`
+      );
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('resolves with an empty object for a hash known to GTI but never sandboxed', async () => {
+      mockClient.get.mockResolvedValue({ data: { data: {} } });
+
+      const result = await handler(mockContext, { fileHash: SHA256_HASH });
+
+      expect(result).toEqual({ data: {} });
     });
 
     it('throws on a 404 (hash unknown to GTI), matching the real API error shape', async () => {

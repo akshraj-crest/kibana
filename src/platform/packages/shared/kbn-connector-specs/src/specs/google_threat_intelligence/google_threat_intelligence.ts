@@ -9,8 +9,8 @@
 
 import { i18n } from '@kbn/i18n';
 import type { ConnectorSpec } from '../../connector_spec';
-import { GetFileBehavioursInputSchema } from './types';
-import type { GetFileBehavioursInput } from './types';
+import { GetFileBehavioursInputSchema, GetFileMitreAttackTechniquesInputSchema } from './types';
+import type { GetFileBehavioursInput, GetFileMitreAttackTechniquesInput } from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
 const GTI_HEADERS = { 'x-tool': 'Elastic' };
@@ -48,7 +48,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     id: '.google_threat_intelligence',
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
-      defaultMessage: 'Get sandbox detonation reports for a file from Google Threat Intelligence',
+      defaultMessage:
+        'Get file sandbox behaviour reports and MITRE ATT&CK technique mappings from Google Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -86,6 +87,29 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    getFileMitreAttackTechniques: {
+      isTool: true,
+      description:
+        'Get the MITRE ATT&CK tactics and techniques observed for a file by hash (SHA-256, SHA-1, or ' +
+        'MD5), grouped by the sandbox that observed them. Each technique lists the signatures that ' +
+        'triggered it and their severity. Throws when GTI has no record of the hash at all.',
+      input: GetFileMitreAttackTechniquesInputSchema,
+      handler: async (ctx, input: GetFileMitreAttackTechniquesInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/files/${encodeURIComponent(
+              input.fileHash
+            )}/behaviour_mitre_trees`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
@@ -94,6 +118,10 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     '## File sandbox behaviour',
     '- This action has no pagination or limit parameter, so a file with many sandbox runs comes back ' +
       'in one response. Large files can hit the connector response-size limit as a result.',
+    '',
+    '## MITRE ATT&CK techniques',
+    '- `getFileMitreAttackTechniques` groups tactics, techniques, and signatures by sandbox name, not ' +
+      'as a flat list. The same file can show a different ATT&CK tree per sandbox it was detonated in.',
   ].join('\n'),
 
   test: {

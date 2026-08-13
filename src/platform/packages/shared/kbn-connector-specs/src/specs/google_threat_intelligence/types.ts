@@ -27,3 +27,12 @@ export const GetFileBehavioursInputSchema = lazySchema(() =>
   })
 );
 export type GetFileBehavioursInput = z.infer<typeof GetFileBehavioursInputSchema>;
+
+export const GetFileMitreAttackTechniquesInputSchema = lazySchema(() =>
+  z.object({
+    fileHash: FILE_HASH_SCHEMA,
+  })
+);
+export type GetFileMitreAttackTechniquesInput = z.infer<
+  typeof GetFileMitreAttackTechniquesInputSchema
+>;
