@@ -9,6 +9,9 @@
 
 import type { ActionContext } from '../../connector_spec';
 import { GoogleThreatIntelligenceConnector } from './google_threat_intelligence';
+import { GetFileBehavioursInputSchema } from './types';
+
+const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
 
 describe('GoogleThreatIntelligenceConnector', () => {
   const mockClient = {
@@ -81,6 +84,65 @@ describe('GoogleThreatIntelligenceConnector', () => {
       await expect(GoogleThreatIntelligenceConnector.test.handler(mockContext)).rejects.toThrow(
         'GTI API error (400): BadRequestError'
       );
+    });
+  });
+
+  describe('getFileBehaviours', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getFileBehaviours.handler;
+
+    it('rejects a malformed hash at the schema level, before the handler runs', () => {
+      const result = GetFileBehavioursInputSchema.safeParse({ fileHash: 'test' });
+      expect(result.success).toBe(false);
+    });
+
+    it('calls the behaviours endpoint with the hash and x-tool header, and returns populated data as-is', async () => {
+      const apiResponse = {
+        data: [
+          {
+            id: `${SHA256_HASH}_C2AE`,
+            type: 'file_behaviour',
+            attributes: { sandbox_name: 'C2AE' },
+          },
+        ],
+        meta: { count: 1 },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { fileHash: SHA256_HASH });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(`https://www.virustotal.com/api/v3/files/${SHA256_HASH}/behaviours`);
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('resolves with an empty collection for a hash known to GTI but never sandboxed', async () => {
+      mockClient.get.mockResolvedValue({
+        data: { data: [], meta: { count: 0 } },
+      });
+
+      const result = await handler(mockContext, { fileHash: SHA256_HASH });
+
+      expect(result).toEqual({ data: [], meta: { count: 0 } });
+    });
+
+    it('throws on a 404 (hash unknown to GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: `File "${SHA256_HASH}" not found` } },
+        },
+      });
+
+      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow(
+        `GTI API error (404): File "${SHA256_HASH}" not found`
+      );
+    });
+
+    it('throws on a bare network error with no response envelope', async () => {
+      mockClient.get.mockRejectedValue(new Error('ECONNREFUSED'));
+
+      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow('ECONNREFUSED');
     });
   });
 });

@@ -9,8 +9,11 @@
 
 import { i18n } from '@kbn/i18n';
 import type { ConnectorSpec } from '../../connector_spec';
+import { GetFileBehavioursInputSchema } from './types';
+import type { GetFileBehavioursInput } from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
+const GTI_HEADERS = { 'x-tool': 'Elastic' };
 
 interface GtiErrorResponse {
   response?: {
@@ -45,7 +48,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     id: '.google_threat_intelligence',
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
-      defaultMessage: 'Get threat intelligence data from Google Threat Intelligence',
+      defaultMessage: 'Get sandbox detonation reports for a file from Google Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -61,11 +64,39 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     ],
   },
 
-  actions: {},
+  actions: {
+    getFileBehaviours: {
+      isTool: true,
+      description:
+        'Get sandbox detonation reports for a file by hash (SHA-256, SHA-1, or MD5). Each report ' +
+        'covers one sandbox run: process tree, files, registry keys and network activity it touched, ' +
+        'plus the verdict. Returns an empty collection when the hash is known to GTI but has not been ' +
+        'sandboxed. Throws when GTI has no record of the hash at all.',
+      input: GetFileBehavioursInputSchema,
+      handler: async (ctx, input: GetFileBehavioursInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/files/${encodeURIComponent(input.fileHash)}/behaviours`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+  },
+
+  skill: [
+    '## Google Threat Intelligence connector',
+    '',
+    '## File sandbox behaviour',
+    '- This action has no pagination or limit parameter, so a file with many sandbox runs comes back ' +
+      'in one response. Large files can hit the connector response-size limit as a result.',
+  ].join('\n'),
 
   test: {
-    // enabled must be explicitly set to true, otherwise the "Test connector"
-    // button stays disabled in the UI even though a handler is defined.
     enabled: true,
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.test.description', {
       defaultMessage:
@@ -75,7 +106,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       try {
         const response = await ctx.client.get<GtiIpReportResponse>(
           `${GTI_API_BASE_URL}/api/v3/ip_addresses/8.8.8.8`,
-          { headers: { 'x-tool': 'Elastic' } }
+          { headers: GTI_HEADERS }
         );
         const hasGtiAssessment = Boolean(response.data?.data?.attributes?.gti_assessment);
         if (!hasGtiAssessment) {
