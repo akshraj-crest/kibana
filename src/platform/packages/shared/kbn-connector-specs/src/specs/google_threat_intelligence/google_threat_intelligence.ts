@@ -71,14 +71,15 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       description:
         'Get sandbox detonation reports for a file by hash (SHA-256, SHA-1, or MD5). Each report ' +
         'covers one sandbox run: process tree, files, registry keys and network activity it touched, ' +
-        'plus the verdict. Returns an empty collection when the hash is known to GTI but has not been ' +
-        'sandboxed. Throws when GTI has no record of the hash at all.',
+        'plus the verdict. Returns up to 10 reports by default; use limit and cursor to page through ' +
+        'more. Returns an empty collection when the hash is known to GTI but has not been sandboxed. ' +
+        'Throws when GTI has no record of the hash at all.',
       input: GetFileBehavioursInputSchema,
       handler: async (ctx, input: GetFileBehavioursInput) => {
         try {
           const response = await ctx.client.get(
             `${GTI_API_BASE_URL}/api/v3/files/${encodeURIComponent(input.fileHash)}/behaviours`,
-            { headers: GTI_HEADERS }
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
           );
           return response.data;
         } catch (error: unknown) {
@@ -116,8 +117,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     '## Google Threat Intelligence connector',
     '',
     '## File sandbox behaviour',
-    '- This action has no pagination or limit parameter, so a file with many sandbox runs comes back ' +
-      'in one response. Large files can hit the connector response-size limit as a result.',
+    '- `getFileBehaviours` supports paging: pass `limit` (0-40, defaults to 10) to bound the response ' +
+      'size, and pass the `cursor` from a previous response to fetch the next page.',
     '',
     '## MITRE ATT&CK techniques',
     '- `getFileMitreAttackTechniques` groups tactics, techniques, and signatures by sandbox name, not ' +

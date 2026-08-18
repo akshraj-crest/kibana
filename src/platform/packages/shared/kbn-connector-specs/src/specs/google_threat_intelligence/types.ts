@@ -24,6 +24,22 @@ export const FILE_HASH_SCHEMA = z
 export const GetFileBehavioursInputSchema = lazySchema(() =>
   z.object({
     fileHash: FILE_HASH_SCHEMA,
+    limit: z
+      .number()
+      .int()
+      .min(0)
+      .max(40)
+      .optional()
+      .describe(
+        'Maximum number of behaviour reports to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.'
+      ),
+    cursor: z
+      .string()
+      .max(2048)
+      .optional()
+      .describe(
+        'Continuation cursor from a previous response, used to retrieve the next page of results.'
+      ),
   })
 );
 export type GetFileBehavioursInput = z.infer<typeof GetFileBehavioursInputSchema>;

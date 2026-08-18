@@ -95,6 +95,25 @@ describe('GoogleThreatIntelligenceConnector', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects a limit above 40 at the schema level', () => {
+      const result = GetFileBehavioursInputSchema.safeParse({ fileHash: SHA256_HASH, limit: 41 });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a negative limit at the schema level', () => {
+      const result = GetFileBehavioursInputSchema.safeParse({ fileHash: SHA256_HASH, limit: -1 });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts limit at its boundary values (0 and 40)', () => {
+      expect(
+        GetFileBehavioursInputSchema.safeParse({ fileHash: SHA256_HASH, limit: 0 }).success
+      ).toBe(true);
+      expect(
+        GetFileBehavioursInputSchema.safeParse({ fileHash: SHA256_HASH, limit: 40 }).success
+      ).toBe(true);
+    });
+
     it('calls the behaviours endpoint with the hash and x-tool header, and returns populated data as-is', async () => {
       const apiResponse = {
         data: [

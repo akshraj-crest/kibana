@@ -33,6 +33,8 @@ The Google threat intelligence connector has the following actions:
 Get File Behaviours
 :   Retrieve sandbox detonation reports for a file by hash. Each report covers one sandbox run: process tree, files, registry keys and network activity it touched, plus the verdict. Returns an empty collection when the hash is known to GTI but has not been sandboxed.
     - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
+    - **Limit** (optional): Maximum number of behaviour reports to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
+    - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get File MITRE ATT&CK Techniques
 :   Retrieve the MITRE ATT&CK tactics and techniques observed for a file by hash, grouped by the sandbox that observed them. Each technique lists the signatures that triggered it and their severity.
