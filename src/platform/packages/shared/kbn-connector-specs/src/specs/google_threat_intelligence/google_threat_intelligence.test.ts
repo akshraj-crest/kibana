@@ -13,6 +13,7 @@ import {
   GetFileBehavioursInputSchema,
   GetFileMitreAttackTechniquesInputSchema,
   GetIpReportInputSchema,
+  GetIpRelationshipInputSchema,
 } from './types';
 
 const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
@@ -245,6 +246,131 @@ describe('GoogleThreatIntelligenceConnector', () => {
       );
       expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
       expect(result).toEqual(apiResponse);
+    });
+  });
+
+  describe('getIpRelationship', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getIpRelationship.handler;
+
+    it('rejects a malformed IP address at the schema level, before the handler runs', () => {
+      const result = GetIpRelationshipInputSchema.safeParse({
+        ipAddress: 'not-an-ip',
+        relationship: 'resolutions',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a couple of representative relationship values', () => {
+      expect(
+        GetIpRelationshipInputSchema.safeParse({
+          ipAddress: '8.8.8.8',
+          relationship: 'communicating_files',
+        }).success
+      ).toBe(true);
+      expect(
+        GetIpRelationshipInputSchema.safeParse({
+          ipAddress: '8.8.8.8',
+          relationship: 'resolutions',
+        }).success
+      ).toBe(true);
+    });
+
+    it('rejects a limit above 40 at the schema level', () => {
+      const result = GetIpRelationshipInputSchema.safeParse({
+        ipAddress: '8.8.8.8',
+        relationship: 'urls',
+        limit: 41,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a negative limit at the schema level', () => {
+      const result = GetIpRelationshipInputSchema.safeParse({
+        ipAddress: '8.8.8.8',
+        relationship: 'urls',
+        limit: -1,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts limit at its boundary values (0 and 40)', () => {
+      expect(
+        GetIpRelationshipInputSchema.safeParse({
+          ipAddress: '8.8.8.8',
+          relationship: 'urls',
+          limit: 0,
+        }).success
+      ).toBe(true);
+      expect(
+        GetIpRelationshipInputSchema.safeParse({
+          ipAddress: '8.8.8.8',
+          relationship: 'urls',
+          limit: 40,
+        }).success
+      ).toBe(true);
+    });
+
+    it('calls the relationship endpoint with both segments encoded, passes limit/cursor through, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: [
+          { id: 'resolution-id', type: 'resolution', attributes: { host_name: 'example.com' } },
+        ],
+        meta: { count: 200, cursor: 'opaque-cursor' },
+        links: {
+          self: 'https://www.virustotal.com/api/v3/ip_addresses/2606:4700:4700::1111/resolutions?limit=2',
+          next: 'https://www.virustotal.com/api/v3/ip_addresses/2606:4700:4700::1111/resolutions?limit=2&cursor=opaque-cursor',
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, {
+        ipAddress: '2606:4700:4700::1111',
+        relationship: 'resolutions',
+        limit: 2,
+      });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(
+        `https://www.virustotal.com/api/v3/ip_addresses/${encodeURIComponent(
+          '2606:4700:4700::1111'
+        )}/resolutions`
+      );
+      expect(call[1]).toMatchObject({
+        headers: { 'x-tool': 'Elastic' },
+        params: { limit: 2, cursor: undefined },
+      });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (relationship not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'Resource not found.' } },
+        },
+      });
+
+      await expect(
+        handler(mockContext, { ipAddress: '8.8.8.8', relationship: 'not_a_real_relationship' })
+      ).rejects.toThrow('GTI API error (404): Resource not found.');
+    });
+
+    it('resolves with an empty collection when limit is 0', async () => {
+      mockClient.get.mockResolvedValue({
+        data: { data: [], meta: { count: 200 }, links: { self: 'https://example.com' } },
+      });
+
+      const result = await handler(mockContext, {
+        ipAddress: '8.8.8.8',
+        relationship: 'resolutions',
+        limit: 0,
+      });
+
+      expect(result).toEqual({
+        data: [],
+        meta: { count: 200 },
+        links: { self: 'https://example.com' },
+      });
     });
   });
 

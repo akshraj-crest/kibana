@@ -63,3 +63,33 @@ export const GetIpReportInputSchema = lazySchema(() =>
   })
 );
 export type GetIpReportInput = z.infer<typeof GetIpReportInputSchema>;
+
+export const GetIpRelationshipInputSchema = lazySchema(() =>
+  z.object({
+    ipAddress: IP_ADDRESS_SCHEMA,
+    relationship: z
+      .string()
+      .max(100)
+      .describe(
+        'Relationship to retrieve for the IP address, e.g. "communicating_files", "resolutions", ' +
+          'or "urls".'
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(0)
+      .max(40)
+      .optional()
+      .describe(
+        'Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.'
+      ),
+    cursor: z
+      .string()
+      .max(2048)
+      .optional()
+      .describe(
+        'Continuation cursor from a previous response, used to retrieve the next page of results.'
+      ),
+  })
+);
+export type GetIpRelationshipInput = z.infer<typeof GetIpRelationshipInputSchema>;

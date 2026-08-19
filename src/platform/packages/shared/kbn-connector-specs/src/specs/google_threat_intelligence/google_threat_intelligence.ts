@@ -13,11 +13,13 @@ import {
   GetFileBehavioursInputSchema,
   GetFileMitreAttackTechniquesInputSchema,
   GetIpReportInputSchema,
+  GetIpRelationshipInputSchema,
 } from './types';
 import type {
   GetFileBehavioursInput,
   GetFileMitreAttackTechniquesInput,
   GetIpReportInput,
+  GetIpRelationshipInput,
 } from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
@@ -57,8 +59,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
-        'Get file sandbox behaviour reports, MITRE ATT&CK technique mappings, and IP address ' +
-        'reputation reports from Google Threat Intelligence',
+        'Get file sandbox behaviour reports, MITRE ATT&CK technique mappings, IP address ' +
+        'reputation reports, and IP address relationship data from Google Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -144,6 +146,31 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    getIpRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to an IP address (IPv4 or IPv6) by relationship type, for example files ' +
+        'that communicate with it, URLs hosted on it, or its historical DNS resolutions. See the ' +
+        '`relationship` parameter for examples and where to find the full current list. Returns up ' +
+        'to 10 related objects by default; use limit and cursor to page through more. Throws when ' +
+        'the relationship type is not one GTI currently recognizes for IP objects.',
+      input: GetIpRelationshipInputSchema,
+      handler: async (ctx, input: GetIpRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/ip_addresses/${encodeURIComponent(
+              input.ipAddress
+            )}/${encodeURIComponent(input.relationship)}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
@@ -158,7 +185,11 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       'as a flat list. The same file can show a different ATT&CK tree per sandbox it was detonated in.',
     '',
     '## IP address report',
-    '- `getIpReport` returns the full GTI report object as-is; there is no compact or pruned variant.',
+    '- `getIpReport` returns the full GTI report object as-is; there is no compact or pruned variant. ' +
+      'Use `getIpRelationship` to traverse related objects such as communicating files or hosted URLs.',
+    '',
+    '## IP address relationships',
+    '- `getIpRelationship` supports the same limit/cursor paging as `getFileBehaviours`.',
   ].join('\n'),
 
   test: {
