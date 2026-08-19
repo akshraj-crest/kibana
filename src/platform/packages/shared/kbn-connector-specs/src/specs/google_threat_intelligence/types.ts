@@ -72,7 +72,8 @@ export const GetIpRelationshipInputSchema = lazySchema(() =>
       .max(100)
       .describe(
         'Relationship to retrieve for the IP address, e.g. "communicating_files", "resolutions", ' +
-          'or "urls".'
+          'or "urls". Full current list: ' +
+          'https://gtidocs.virustotal.com/reference/ip-object#relationships'
       ),
     limit: z
       .number()

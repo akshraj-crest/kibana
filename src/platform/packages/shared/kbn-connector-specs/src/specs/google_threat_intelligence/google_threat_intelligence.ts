@@ -59,8 +59,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
-        'Get file sandbox behaviour reports, MITRE ATT&CK technique mappings, IP address ' +
-        'reputation reports, and IP address relationship data from Google Threat Intelligence',
+        'Get file sandbox, MITRE ATT&CK, IP reputation, and IP relationship data from Google ' +
+        'Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
