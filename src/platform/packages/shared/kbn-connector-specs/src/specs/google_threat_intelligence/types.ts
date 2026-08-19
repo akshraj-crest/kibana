@@ -52,3 +52,14 @@ export const GetFileMitreAttackTechniquesInputSchema = lazySchema(() =>
 export type GetFileMitreAttackTechniquesInput = z.infer<
   typeof GetFileMitreAttackTechniquesInputSchema
 >;
+
+export const IP_ADDRESS_SCHEMA = z
+  .union([z.ipv4(), z.ipv6()])
+  .describe('IPv4 or IPv6 address to look up, e.g. "8.8.8.8" or "2001:4860:4860::8888"');
+
+export const GetIpReportInputSchema = lazySchema(() =>
+  z.object({
+    ipAddress: IP_ADDRESS_SCHEMA,
+  })
+);
+export type GetIpReportInput = z.infer<typeof GetIpReportInputSchema>;

@@ -1,7 +1,7 @@
 ---
 navigation_title: "Google threat intelligence"
 type: reference
-description: "Use the Google threat intelligence connector to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings from Google Threat Intelligence."
+description: "Use the Google threat intelligence connector to retrieve file sandbox behaviour reports, MITRE ATT&CK technique mappings, and IP address reputation reports from Google Threat Intelligence."
 applies_to:
   stack: preview 9.6
   serverless: preview
@@ -9,7 +9,7 @@ applies_to:
 
 # Google threat intelligence connector [google-threat-intelligence-action-type]
 
-The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings for a file hash.
+The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings for a file hash, and reputation reports for an IP address.
 
 ## Create connectors in {{kib}} [define-google-threat-intelligence-ui]
 
@@ -40,7 +40,11 @@ Get File MITRE ATT&CK Techniques
 :   Retrieve the MITRE ATT&CK tactics and techniques observed for a file by hash, grouped by the sandbox that observed them. Each technique lists the signatures that triggered it and their severity.
     - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
 
-Both actions throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity.
+Get IP Report
+:   Retrieve the Google Threat Intelligence reputation and detection report for an IP address, including the GTI assessment, last analysis statistics, network ownership and geolocation where available, and WHOIS data. Has not been observed to fail for a well-formed IP address, even a private or reserved one with no real internet presence.
+    - **IP address** (required): IPv4 or IPv6 address to look up.
+
+Get File Behaviours and Get File MITRE ATT&CK Techniques both throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report.
 
 ## Connector networking configuration [google-threat-intelligence-connector-networking-configuration]
 

@@ -9,7 +9,11 @@
 
 import type { ActionContext } from '../../connector_spec';
 import { GoogleThreatIntelligenceConnector } from './google_threat_intelligence';
-import { GetFileBehavioursInputSchema, GetFileMitreAttackTechniquesInputSchema } from './types';
+import {
+  GetFileBehavioursInputSchema,
+  GetFileMitreAttackTechniquesInputSchema,
+  GetIpReportInputSchema,
+} from './types';
 
 const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
 
@@ -55,34 +59,11 @@ describe('GoogleThreatIntelligenceConnector', () => {
       );
     });
 
-    it('throws on a network/API failure with no response envelope', async () => {
+    it('throws on API/network failure, same as every action (see "GTI API error handling" below)', async () => {
       mockClient.get.mockRejectedValue(new Error('ECONNREFUSED'));
 
       await expect(GoogleThreatIntelligenceConnector.test.handler(mockContext)).rejects.toThrow(
         'ECONNREFUSED'
-      );
-    });
-
-    it('throws an enriched GTI error when the API returns an error envelope', async () => {
-      mockClient.get.mockRejectedValue({
-        response: {
-          status: 401,
-          data: { error: { code: 'WrongCredentialsError', message: 'Wrong API key' } },
-        },
-      });
-
-      await expect(GoogleThreatIntelligenceConnector.test.handler(mockContext)).rejects.toThrow(
-        'GTI API error (401): Wrong API key'
-      );
-    });
-
-    it('falls back to the error code when the envelope has no message', async () => {
-      mockClient.get.mockRejectedValue({
-        response: { status: 400, data: { error: { code: 'BadRequestError' } } },
-      });
-
-      await expect(GoogleThreatIntelligenceConnector.test.handler(mockContext)).rejects.toThrow(
-        'GTI API error (400): BadRequestError'
       );
     });
   });
@@ -157,12 +138,6 @@ describe('GoogleThreatIntelligenceConnector', () => {
         `GTI API error (404): File "${SHA256_HASH}" not found`
       );
     });
-
-    it('throws on a bare network error with no response envelope', async () => {
-      mockClient.get.mockRejectedValue(new Error('ECONNREFUSED'));
-
-      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow('ECONNREFUSED');
-    });
   });
 
   describe('getFileMitreAttackTechniques', () => {
@@ -225,8 +200,81 @@ describe('GoogleThreatIntelligenceConnector', () => {
         `GTI API error (404): File "${SHA256_HASH}" not found`
       );
     });
+  });
 
-    it('throws on a bare network error with no response envelope', async () => {
+  describe('getIpReport', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getIpReport.handler;
+
+    it('rejects a malformed IP address at the schema level, before the handler runs', () => {
+      const result = GetIpReportInputSchema.safeParse({ ipAddress: 'not-an-ip' });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a valid IPv4 address', () => {
+      expect(GetIpReportInputSchema.safeParse({ ipAddress: '8.8.8.8' }).success).toBe(true);
+    });
+
+    it('accepts a valid IPv6 address', () => {
+      expect(GetIpReportInputSchema.safeParse({ ipAddress: '2001:4860:4860::8888' }).success).toBe(
+        true
+      );
+    });
+
+    it('calls the ip_addresses endpoint with the address and x-tool header, URL-encodes an IPv6 address, and returns the report as-is', async () => {
+      const apiResponse = {
+        data: {
+          id: '2001:4860:4860::8888',
+          type: 'ip_address',
+          attributes: {
+            as_owner: 'Google LLC',
+            asn: 15169,
+            network: '2001:4860:4860::/48',
+            gti_assessment: { verdict: { value: 'VERDICT_BENIGN' } },
+          },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { ipAddress: '2001:4860:4860::8888' });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(
+        `https://www.virustotal.com/api/v3/ip_addresses/${encodeURIComponent(
+          '2001:4860:4860::8888'
+        )}`
+      );
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+  });
+
+  describe('GTI API error handling', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getFileBehaviours.handler;
+
+    it('throws an enriched GTI error when the API returns an error envelope', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 401,
+          data: { error: { code: 'WrongCredentialsError', message: 'Wrong API key' } },
+        },
+      });
+
+      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow(
+        'GTI API error (401): Wrong API key'
+      );
+    });
+
+    it('falls back to the error code when the envelope has no message', async () => {
+      mockClient.get.mockRejectedValue({
+        response: { status: 400, data: { error: { code: 'BadRequestError' } } },
+      });
+
+      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow(
+        'GTI API error (400): BadRequestError'
+      );
+    });
+
+    it('rethrows the original error when the response body is not GTI-shaped, e.g. a bare network error', async () => {
       mockClient.get.mockRejectedValue(new Error('ECONNREFUSED'));
 
       await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow('ECONNREFUSED');

@@ -9,8 +9,16 @@
 
 import { i18n } from '@kbn/i18n';
 import type { ConnectorSpec } from '../../connector_spec';
-import { GetFileBehavioursInputSchema, GetFileMitreAttackTechniquesInputSchema } from './types';
-import type { GetFileBehavioursInput, GetFileMitreAttackTechniquesInput } from './types';
+import {
+  GetFileBehavioursInputSchema,
+  GetFileMitreAttackTechniquesInputSchema,
+  GetIpReportInputSchema,
+} from './types';
+import type {
+  GetFileBehavioursInput,
+  GetFileMitreAttackTechniquesInput,
+  GetIpReportInput,
+} from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
 const GTI_HEADERS = { 'x-tool': 'Elastic' };
@@ -49,7 +57,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
-        'Get file sandbox behaviour reports and MITRE ATT&CK technique mappings from Google Threat Intelligence',
+        'Get file sandbox behaviour reports, MITRE ATT&CK technique mappings, and IP address ' +
+        'reputation reports from Google Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -111,6 +120,30 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    getIpReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for an IP address (IPv4 ' +
+        'or IPv6). Returns the GTI assessment (verdict, threat score, severity), last analysis ' +
+        'statistics, network ownership and geolocation where available, WHOIS data, and any tags GTI ' +
+        'has applied. Has not been observed to fail for a well-formed IP address, even one with no ' +
+        'real internet presence such as a private or reserved address; throws when the IP address ' +
+        'itself is malformed.',
+      input: GetIpReportInputSchema,
+      handler: async (ctx, input: GetIpReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/ip_addresses/${encodeURIComponent(input.ipAddress)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
@@ -123,6 +156,9 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     '## MITRE ATT&CK techniques',
     '- `getFileMitreAttackTechniques` groups tactics, techniques, and signatures by sandbox name, not ' +
       'as a flat list. The same file can show a different ATT&CK tree per sandbox it was detonated in.',
+    '',
+    '## IP address report',
+    '- `getIpReport` returns the full GTI report object as-is; there is no compact or pruned variant.',
   ].join('\n'),
 
   test: {
