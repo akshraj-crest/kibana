@@ -16,6 +16,8 @@ import {
   GetIpRelationshipInputSchema,
   GetDomainReportInputSchema,
   GetDomainRelationshipInputSchema,
+  GetUrlReportInputSchema,
+  GetUrlRelationshipInputSchema,
 } from './types';
 
 const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
@@ -388,6 +390,12 @@ describe('GoogleThreatIntelligenceConnector', () => {
       expect(GetDomainReportInputSchema.safeParse({ domain: 'example.com' }).success).toBe(true);
     });
 
+    it('rejects a domain longer than 253 characters at the schema level', () => {
+      const overlong = `${Array(130).fill('a').join('.')}.com`;
+      const result = GetDomainReportInputSchema.safeParse({ domain: overlong });
+      expect(result.success).toBe(false);
+    });
+
     it('calls the domains endpoint with the domain and x-tool header, and returns the report as-is', async () => {
       const apiResponse = {
         data: {
@@ -514,6 +522,170 @@ describe('GoogleThreatIntelligenceConnector', () => {
 
       await expect(
         handler(mockContext, { domain: 'example.com', relationship: 'not_a_real_relationship' })
+      ).rejects.toThrow('GTI API error (404): Resource not found.');
+    });
+  });
+
+  describe('getUrlReport', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getUrlReport.handler;
+    const SAMPLE_URL = 'http://www.example.com/path?q=1';
+    const SAMPLE_URL_ID = 'aHR0cDovL3d3dy5leGFtcGxlLmNvbS9wYXRoP3E9MQ';
+
+    it('rejects a malformed URL at the schema level, before the handler runs', () => {
+      const result = GetUrlReportInputSchema.safeParse({ url: 'not-a-url' });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a valid https URL', () => {
+      expect(GetUrlReportInputSchema.safeParse({ url: 'https://example.com/path' }).success).toBe(
+        true
+      );
+    });
+
+    it('rejects a URL longer than 2048 characters at the schema level', () => {
+      const overlong = `https://example.com/${'a'.repeat(2048)}`;
+      const result = GetUrlReportInputSchema.safeParse({ url: overlong });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a non-http(s) URL scheme, e.g. ftp', () => {
+      expect(GetUrlReportInputSchema.safeParse({ url: 'ftp://example.com/file' }).success).toBe(
+        true
+      );
+    });
+
+    it('derives the GTI URL identifier (base64url of the URL, no padding) and calls the urls endpoint', async () => {
+      const apiResponse = {
+        data: {
+          id: SAMPLE_URL_ID,
+          type: 'url',
+          attributes: {
+            url: SAMPLE_URL,
+            gti_assessment: { verdict: { value: 'VERDICT_UNDETECTED' } },
+          },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { url: SAMPLE_URL });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(`https://www.virustotal.com/api/v3/urls/${SAMPLE_URL_ID}`);
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (URL unknown to GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'URL not found' } },
+        },
+      });
+
+      await expect(handler(mockContext, { url: SAMPLE_URL })).rejects.toThrow(
+        'GTI API error (404): URL not found'
+      );
+    });
+  });
+
+  describe('getUrlRelationship', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getUrlRelationship.handler;
+    const SAMPLE_URL = 'http://www.example.com/path?q=1';
+    const SAMPLE_URL_ID = 'aHR0cDovL3d3dy5leGFtcGxlLmNvbS9wYXRoP3E9MQ';
+
+    it('rejects a malformed URL at the schema level, before the handler runs', () => {
+      const result = GetUrlRelationshipInputSchema.safeParse({
+        url: 'not-a-url',
+        relationship: 'downloaded_files',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a couple of representative relationship values', () => {
+      expect(
+        GetUrlRelationshipInputSchema.safeParse({
+          url: 'https://example.com/path',
+          relationship: 'downloaded_files',
+        }).success
+      ).toBe(true);
+      expect(
+        GetUrlRelationshipInputSchema.safeParse({
+          url: 'https://example.com/path',
+          relationship: 'redirects_to',
+        }).success
+      ).toBe(true);
+    });
+
+    it('rejects a limit above 40 at the schema level', () => {
+      const result = GetUrlRelationshipInputSchema.safeParse({
+        url: 'https://example.com/path',
+        relationship: 'downloaded_files',
+        limit: 41,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts limit at its boundary values (0 and 40)', () => {
+      expect(
+        GetUrlRelationshipInputSchema.safeParse({
+          url: 'https://example.com/path',
+          relationship: 'downloaded_files',
+          limit: 0,
+        }).success
+      ).toBe(true);
+      expect(
+        GetUrlRelationshipInputSchema.safeParse({
+          url: 'https://example.com/path',
+          relationship: 'downloaded_files',
+          limit: 40,
+        }).success
+      ).toBe(true);
+    });
+
+    it('calls the relationship endpoint with the derived URL identifier, passes limit/cursor through, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: [
+          {
+            id: '064ab5414e3e6d48d40937ecf2d3178f67817ccfc221c801ff7602af96635c18',
+            type: 'file',
+            attributes: { meaningful_name: 'sample.exe' },
+          },
+        ],
+        meta: { count: 57, cursor: 'opaque-cursor' },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, {
+        url: SAMPLE_URL,
+        relationship: 'downloaded_files',
+        limit: 2,
+      });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(
+        `https://www.virustotal.com/api/v3/urls/${SAMPLE_URL_ID}/downloaded_files`
+      );
+      expect(call[1]).toMatchObject({
+        headers: { 'x-tool': 'Elastic' },
+        params: { limit: 2, cursor: undefined },
+      });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (relationship not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'Resource not found.' } },
+        },
+      });
+
+      await expect(
+        handler(mockContext, {
+          url: SAMPLE_URL,
+          relationship: 'not_a_real_relationship',
+        })
       ).rejects.toThrow('GTI API error (404): Resource not found.');
     });
   });

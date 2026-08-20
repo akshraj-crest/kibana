@@ -16,6 +16,8 @@ import {
   GetIpRelationshipInputSchema,
   GetDomainReportInputSchema,
   GetDomainRelationshipInputSchema,
+  GetUrlReportInputSchema,
+  GetUrlRelationshipInputSchema,
 } from './types';
 import type {
   GetFileBehavioursInput,
@@ -24,6 +26,8 @@ import type {
   GetIpRelationshipInput,
   GetDomainReportInput,
   GetDomainRelationshipInput,
+  GetUrlReportInput,
+  GetUrlRelationshipInput,
 } from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
@@ -57,6 +61,10 @@ function throwGtiError(error: unknown): void {
   throw new Error(`GTI API error (${response?.status ?? 'unknown'}): ${detail}`);
 }
 
+function toGtiUrlId(url: string): string {
+  return Buffer.from(url, 'utf-8').toString('base64url');
+}
+
 export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
   metadata: {
     id: '.google_threat_intelligence',
@@ -64,7 +72,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
         'Get file sandbox behaviour, MITRE ATT&CK, and IOC reputation and relationship data for ' +
-        'IP addresses and domains from Google Threat Intelligence',
+        'IP addresses, domains, and URLs from Google Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -221,6 +229,54 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    getUrlReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a URL. Returns ' +
+        'the GTI assessment (verdict, threat score, severity), last analysis statistics, ' +
+        'categorisation, and the final resolved destination after any redirects. Supply the URL ' +
+        'in its natural form; the action derives the identifier GTI uses internally. Throws when ' +
+        'GTI has no record of the URL at all.',
+      input: GetUrlReportInputSchema,
+      handler: async (ctx, input: GetUrlReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/urls/${toGtiUrlId(input.url)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getUrlRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to a URL by relationship type, for example the files downloaded ' +
+        'from it, the domains and IP addresses it contacts, or the URLs it redirects to. See the ' +
+        '`relationship` parameter for examples and where to find the full current list. Returns ' +
+        'up to 10 related objects by default; use limit and cursor to page through more. Supply ' +
+        'the URL in its natural form, the same as for `getUrlReport`.',
+      input: GetUrlRelationshipInputSchema,
+      handler: async (ctx, input: GetUrlRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/urls/${toGtiUrlId(input.url)}/${encodeURIComponent(
+              input.relationship
+            )}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
@@ -248,6 +304,14 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     '',
     '## Domain relationships',
     '- `getDomainRelationship` supports the same limit/cursor paging as `getIpRelationship`.',
+    '',
+    '## URL report',
+    '- `getUrlReport` derives the URL identifier GTI uses internally from the URL you supply; ' +
+      'pass the URL in its natural form, not a pre-encoded identifier.',
+    '',
+    '## URL relationships',
+    '- `getUrlRelationship` takes the same URL and derives the identifier the same way as ' +
+      '`getUrlReport`. It supports the same limit/cursor paging as `getIpRelationship`.',
   ].join('\n'),
 
   test: {

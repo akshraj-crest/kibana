@@ -97,6 +97,7 @@ export type GetIpRelationshipInput = z.infer<typeof GetIpRelationshipInputSchema
 
 export const DOMAIN_SCHEMA = z
   .string()
+  .max(253)
   .regex(z.regexes.domain, { message: 'Must be a valid domain name' })
   .describe('Domain name to look up, e.g. "example.com"');
 
@@ -137,3 +138,46 @@ export const GetDomainRelationshipInputSchema = lazySchema(() =>
   })
 );
 export type GetDomainRelationshipInput = z.infer<typeof GetDomainRelationshipInputSchema>;
+
+export const URL_SCHEMA = z
+  .url()
+  .max(2048)
+  .describe('URL to look up, e.g. "https://example.com/path" or "ftp://example.com/file"');
+
+export const GetUrlReportInputSchema = lazySchema(() =>
+  z.object({
+    url: URL_SCHEMA,
+  })
+);
+export type GetUrlReportInput = z.infer<typeof GetUrlReportInputSchema>;
+
+export const GetUrlRelationshipInputSchema = lazySchema(() =>
+  z.object({
+    url: URL_SCHEMA,
+    relationship: z
+      .string()
+      .max(100)
+      .describe(
+        'Relationship to retrieve for the URL, e.g. "downloaded_files", "contacted_domains", or ' +
+          '"redirects_to". Full current list: ' +
+          'https://gtidocs.virustotal.com/reference/url-object#relationships'
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(0)
+      .max(40)
+      .optional()
+      .describe(
+        'Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.'
+      ),
+    cursor: z
+      .string()
+      .max(2048)
+      .optional()
+      .describe(
+        'Continuation cursor from a previous response, used to retrieve the next page of results.'
+      ),
+  })
+);
+export type GetUrlRelationshipInput = z.infer<typeof GetUrlRelationshipInputSchema>;
