@@ -181,3 +181,41 @@ export const GetUrlRelationshipInputSchema = lazySchema(() =>
   })
 );
 export type GetUrlRelationshipInput = z.infer<typeof GetUrlRelationshipInputSchema>;
+
+export const GetFileReportInputSchema = lazySchema(() =>
+  z.object({
+    fileHash: FILE_HASH_SCHEMA,
+  })
+);
+export type GetFileReportInput = z.infer<typeof GetFileReportInputSchema>;
+
+export const GetFileRelationshipInputSchema = lazySchema(() =>
+  z.object({
+    fileHash: FILE_HASH_SCHEMA,
+    relationship: z
+      .string()
+      .max(100)
+      .describe(
+        'Relationship to retrieve for the file, e.g. "contacted_domains", "dropped_files", or ' +
+          '"similar_files". Full current list: ' +
+          'https://gtidocs.virustotal.com/reference/file-object#relationships'
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(0)
+      .max(40)
+      .optional()
+      .describe(
+        'Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.'
+      ),
+    cursor: z
+      .string()
+      .max(2048)
+      .optional()
+      .describe(
+        'Continuation cursor from a previous response, used to retrieve the next page of results.'
+      ),
+  })
+);
+export type GetFileRelationshipInput = z.infer<typeof GetFileRelationshipInputSchema>;

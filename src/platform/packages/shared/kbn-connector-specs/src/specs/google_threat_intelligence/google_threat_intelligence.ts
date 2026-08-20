@@ -18,6 +18,8 @@ import {
   GetDomainRelationshipInputSchema,
   GetUrlReportInputSchema,
   GetUrlRelationshipInputSchema,
+  GetFileReportInputSchema,
+  GetFileRelationshipInputSchema,
 } from './types';
 import type {
   GetFileBehavioursInput,
@@ -28,6 +30,8 @@ import type {
   GetDomainRelationshipInput,
   GetUrlReportInput,
   GetUrlRelationshipInput,
+  GetFileReportInput,
+  GetFileRelationshipInput,
 } from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
@@ -72,7 +76,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
         'Get file sandbox behaviour, MITRE ATT&CK, and IOC reputation and relationship data for ' +
-        'IP addresses, domains, and URLs from Google Threat Intelligence',
+        'IP addresses, domains, URLs, and files from Google Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -277,6 +281,54 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    getFileReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a file by hash ' +
+        '(SHA-256, SHA-1, or MD5). Returns the GTI assessment (verdict, threat score, severity), ' +
+        'last analysis statistics, file type metadata, and popular threat classification. This is ' +
+        'a different action from `getFileBehaviours`, which returns sandbox detonation reports ' +
+        'rather than the reputation report. Throws when GTI has no record of the hash at all.',
+      input: GetFileReportInputSchema,
+      handler: async (ctx, input: GetFileReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/files/${encodeURIComponent(input.fileHash)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getFileRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to a file by hash (SHA-256, SHA-1, or MD5) by relationship type, ' +
+        'for example the domains and IP addresses contacted during detonation, dropped files, or ' +
+        'similar files. See the `relationship` parameter for examples and where to find the full ' +
+        'current list. Returns up to 10 related objects by default; use limit and cursor to page ' +
+        'through more.',
+      input: GetFileRelationshipInputSchema,
+      handler: async (ctx, input: GetFileRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/files/${encodeURIComponent(
+              input.fileHash
+            )}/${encodeURIComponent(input.relationship)}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
@@ -312,6 +364,15 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     '## URL relationships',
     '- `getUrlRelationship` takes the same URL and derives the identifier the same way as ' +
       '`getUrlReport`. It supports the same limit/cursor paging as `getIpRelationship`.',
+    '',
+    '## File report',
+    '- `getFileReport` returns the full GTI file reputation report object as-is, the same shape ' +
+      'as `getIpReport`/`getDomainReport`/`getUrlReport`. It is a different action from ' +
+      '`getFileBehaviours`, which returns sandbox detonation reports rather than the reputation ' +
+      'report.',
+    '',
+    '## File relationships',
+    '- `getFileRelationship` supports the same limit/cursor paging as `getIpRelationship`.',
   ].join('\n'),
 
   test: {

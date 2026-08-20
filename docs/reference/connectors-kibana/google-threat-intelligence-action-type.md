@@ -1,7 +1,7 @@
 ---
 navigation_title: "Google threat intelligence"
 type: reference
-description: "Use the Google threat intelligence connector to retrieve file sandbox behaviour reports, MITRE ATT&CK technique mappings, and IP address, domain, and URL reputation and relationship data from Google Threat Intelligence."
+description: "Use the Google threat intelligence connector to retrieve file sandbox behaviour reports, MITRE ATT&CK technique mappings, and IP address, domain, URL, and file reputation and relationship data from Google Threat Intelligence."
 applies_to:
   stack: preview 9.6
   serverless: preview
@@ -9,7 +9,7 @@ applies_to:
 
 # Google threat intelligence connector [google-threat-intelligence-action-type]
 
-The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings for a file hash, and reputation reports and related objects for an IP address, domain name, or URL.
+The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings for a file hash, and reputation reports and related objects for an IP address, domain name, URL, or file hash.
 
 ## Create connectors in {{kib}} [define-google-threat-intelligence-ui]
 
@@ -73,7 +73,18 @@ Get URL Relationship
     - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
-Get File Behaviours and Get File MITRE ATT&CK Techniques both throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report. Get Domain Report and Get URL Report, by contrast, do throw for a domain or URL GTI has no record of at all, the same as the file actions. Get IP Relationship, Get Domain Relationship, and Get URL Relationship all throw when the relationship type is not one GTI currently recognizes for that object type.
+Get File Report
+:   Retrieve the Google Threat Intelligence reputation and detection report for a file by hash, including the GTI assessment, last analysis statistics, file type metadata, and popular threat classification. This is a different action from Get File Behaviours, which returns sandbox detonation reports rather than the reputation report. Throws when GTI has no record of the hash at all.
+    - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
+
+Get File Relationship
+:   Retrieve objects related to a file by hash by relationship type, for example the domains and IP addresses contacted during detonation, dropped files, or similar files. Refer to the [file object relationships](https://gtidocs.virustotal.com/reference/file-object#relationships) reference for the full set of supported relationship types.
+    - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
+    - **Relationship** (required): A relationship type published for file objects (for example `contacted_domains`, `dropped_files`, `similar_files`).
+    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
+    - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
+
+Get File Behaviours, Get File MITRE ATT&CK Techniques, and Get File Report all throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report. Get Domain Report and Get URL Report, by contrast, do throw for a domain or URL GTI has no record of at all, the same as the file actions. Get IP Relationship, Get Domain Relationship, Get URL Relationship, and Get File Relationship all throw when the relationship type is not one GTI currently recognizes for that object type.
 
 ## Connector networking configuration [google-threat-intelligence-connector-networking-configuration]
 

@@ -18,6 +18,8 @@ import {
   GetDomainRelationshipInputSchema,
   GetUrlReportInputSchema,
   GetUrlRelationshipInputSchema,
+  GetFileReportInputSchema,
+  GetFileRelationshipInputSchema,
 } from './types';
 
 const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
@@ -686,6 +688,147 @@ describe('GoogleThreatIntelligenceConnector', () => {
           url: SAMPLE_URL,
           relationship: 'not_a_real_relationship',
         })
+      ).rejects.toThrow('GTI API error (404): Resource not found.');
+    });
+  });
+
+  describe('getFileReport', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getFileReport.handler;
+
+    it('rejects a malformed hash at the schema level, before the handler runs', () => {
+      const result = GetFileReportInputSchema.safeParse({ fileHash: 'test' });
+      expect(result.success).toBe(false);
+    });
+
+    it('calls the files endpoint with the hash and x-tool header, and returns the report as-is', async () => {
+      const apiResponse = {
+        data: {
+          id: SHA256_HASH,
+          type: 'file',
+          attributes: {
+            meaningful_name: 'sample.exe',
+            type_description: 'Win32 EXE',
+            popular_threat_classification: { suggested_threat_label: 'trojan.cert/example' },
+            gti_assessment: { verdict: { value: 'VERDICT_MALICIOUS' } },
+          },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { fileHash: SHA256_HASH });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(`https://www.virustotal.com/api/v3/files/${SHA256_HASH}`);
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (hash unknown to GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: `File "${SHA256_HASH}" not found` } },
+        },
+      });
+
+      await expect(handler(mockContext, { fileHash: SHA256_HASH })).rejects.toThrow(
+        `GTI API error (404): File "${SHA256_HASH}" not found`
+      );
+    });
+  });
+
+  describe('getFileRelationship', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getFileRelationship.handler;
+
+    it('rejects a malformed hash at the schema level, before the handler runs', () => {
+      const result = GetFileRelationshipInputSchema.safeParse({
+        fileHash: 'test',
+        relationship: 'dropped_files',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a couple of representative relationship values', () => {
+      expect(
+        GetFileRelationshipInputSchema.safeParse({
+          fileHash: SHA256_HASH,
+          relationship: 'contacted_domains',
+        }).success
+      ).toBe(true);
+      expect(
+        GetFileRelationshipInputSchema.safeParse({
+          fileHash: SHA256_HASH,
+          relationship: 'similar_files',
+        }).success
+      ).toBe(true);
+    });
+
+    it('rejects a limit above 40 at the schema level', () => {
+      const result = GetFileRelationshipInputSchema.safeParse({
+        fileHash: SHA256_HASH,
+        relationship: 'dropped_files',
+        limit: 41,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts limit at its boundary values (0 and 40)', () => {
+      expect(
+        GetFileRelationshipInputSchema.safeParse({
+          fileHash: SHA256_HASH,
+          relationship: 'dropped_files',
+          limit: 0,
+        }).success
+      ).toBe(true);
+      expect(
+        GetFileRelationshipInputSchema.safeParse({
+          fileHash: SHA256_HASH,
+          relationship: 'dropped_files',
+          limit: 40,
+        }).success
+      ).toBe(true);
+    });
+
+    it('calls the relationship endpoint with both segments encoded, passes limit/cursor through, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: [
+          {
+            id: 'config.pchelper.ai',
+            type: 'domain',
+            attributes: { reputation: 0, tld: 'ai' },
+          },
+        ],
+        meta: { count: 5, cursor: 'opaque-cursor' },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, {
+        fileHash: SHA256_HASH,
+        relationship: 'contacted_domains',
+        limit: 2,
+      });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(
+        `https://www.virustotal.com/api/v3/files/${SHA256_HASH}/contacted_domains`
+      );
+      expect(call[1]).toMatchObject({
+        headers: { 'x-tool': 'Elastic' },
+        params: { limit: 2, cursor: undefined },
+      });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (relationship not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'Resource not found.' } },
+        },
+      });
+
+      await expect(
+        handler(mockContext, { fileHash: SHA256_HASH, relationship: 'not_a_real_relationship' })
       ).rejects.toThrow('GTI API error (404): Resource not found.');
     });
   });
