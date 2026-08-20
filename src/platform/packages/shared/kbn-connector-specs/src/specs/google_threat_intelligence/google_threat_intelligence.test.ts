@@ -14,6 +14,8 @@ import {
   GetFileMitreAttackTechniquesInputSchema,
   GetIpReportInputSchema,
   GetIpRelationshipInputSchema,
+  GetDomainReportInputSchema,
+  GetDomainRelationshipInputSchema,
 } from './types';
 
 const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
@@ -371,6 +373,148 @@ describe('GoogleThreatIntelligenceConnector', () => {
         meta: { count: 200 },
         links: { self: 'https://example.com' },
       });
+    });
+  });
+
+  describe('getDomainReport', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getDomainReport.handler;
+
+    it('rejects a malformed domain at the schema level, before the handler runs', () => {
+      const result = GetDomainReportInputSchema.safeParse({ domain: 'not a domain!!' });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a valid domain name', () => {
+      expect(GetDomainReportInputSchema.safeParse({ domain: 'example.com' }).success).toBe(true);
+    });
+
+    it('calls the domains endpoint with the domain and x-tool header, and returns the report as-is', async () => {
+      const apiResponse = {
+        data: {
+          id: 'example.com',
+          type: 'domain',
+          attributes: {
+            registrar: 'GoDaddy.com, LLC',
+            tld: 'com',
+            gti_assessment: { verdict: { value: 'VERDICT_BENIGN' } },
+          },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { domain: 'example.com' });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe('https://www.virustotal.com/api/v3/domains/example.com');
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (domain unknown to GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'Domain "example.com" not found' } },
+        },
+      });
+
+      await expect(handler(mockContext, { domain: 'example.com' })).rejects.toThrow(
+        'GTI API error (404): Domain "example.com" not found'
+      );
+    });
+  });
+
+  describe('getDomainRelationship', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getDomainRelationship.handler;
+
+    it('rejects a malformed domain at the schema level, before the handler runs', () => {
+      const result = GetDomainRelationshipInputSchema.safeParse({
+        domain: 'not a domain!!',
+        relationship: 'resolutions',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a couple of representative relationship values', () => {
+      expect(
+        GetDomainRelationshipInputSchema.safeParse({
+          domain: 'example.com',
+          relationship: 'subdomains',
+        }).success
+      ).toBe(true);
+      expect(
+        GetDomainRelationshipInputSchema.safeParse({
+          domain: 'example.com',
+          relationship: 'resolutions',
+        }).success
+      ).toBe(true);
+    });
+
+    it('rejects a limit above 40 at the schema level', () => {
+      const result = GetDomainRelationshipInputSchema.safeParse({
+        domain: 'example.com',
+        relationship: 'resolutions',
+        limit: 41,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts limit at its boundary values (0 and 40)', () => {
+      expect(
+        GetDomainRelationshipInputSchema.safeParse({
+          domain: 'example.com',
+          relationship: 'resolutions',
+          limit: 0,
+        }).success
+      ).toBe(true);
+      expect(
+        GetDomainRelationshipInputSchema.safeParse({
+          domain: 'example.com',
+          relationship: 'resolutions',
+          limit: 40,
+        }).success
+      ).toBe(true);
+    });
+
+    it('calls the relationship endpoint with both segments encoded, passes limit/cursor through, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: [
+          {
+            id: '172.67.155.74example.com',
+            type: 'resolution',
+            attributes: { host_name: 'example.com', ip_address: '172.67.155.74' },
+          },
+        ],
+        meta: { count: 2 },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, {
+        domain: 'example.com',
+        relationship: 'resolutions',
+        limit: 2,
+      });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe('https://www.virustotal.com/api/v3/domains/example.com/resolutions');
+      expect(call[1]).toMatchObject({
+        headers: { 'x-tool': 'Elastic' },
+        params: { limit: 2, cursor: undefined },
+      });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (relationship not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'Resource not found.' } },
+        },
+      });
+
+      await expect(
+        handler(mockContext, { domain: 'example.com', relationship: 'not_a_real_relationship' })
+      ).rejects.toThrow('GTI API error (404): Resource not found.');
     });
   });
 

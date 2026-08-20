@@ -94,3 +94,46 @@ export const GetIpRelationshipInputSchema = lazySchema(() =>
   })
 );
 export type GetIpRelationshipInput = z.infer<typeof GetIpRelationshipInputSchema>;
+
+export const DOMAIN_SCHEMA = z
+  .string()
+  .regex(z.regexes.domain, { message: 'Must be a valid domain name' })
+  .describe('Domain name to look up, e.g. "example.com"');
+
+export const GetDomainReportInputSchema = lazySchema(() =>
+  z.object({
+    domain: DOMAIN_SCHEMA,
+  })
+);
+export type GetDomainReportInput = z.infer<typeof GetDomainReportInputSchema>;
+
+export const GetDomainRelationshipInputSchema = lazySchema(() =>
+  z.object({
+    domain: DOMAIN_SCHEMA,
+    relationship: z
+      .string()
+      .max(100)
+      .describe(
+        'Relationship to retrieve for the domain, e.g. "resolutions", "subdomains", or ' +
+          '"communicating_files". Full current list: ' +
+          'https://gtidocs.virustotal.com/reference/domains-object#relationships'
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(0)
+      .max(40)
+      .optional()
+      .describe(
+        'Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.'
+      ),
+    cursor: z
+      .string()
+      .max(2048)
+      .optional()
+      .describe(
+        'Continuation cursor from a previous response, used to retrieve the next page of results.'
+      ),
+  })
+);
+export type GetDomainRelationshipInput = z.infer<typeof GetDomainRelationshipInputSchema>;

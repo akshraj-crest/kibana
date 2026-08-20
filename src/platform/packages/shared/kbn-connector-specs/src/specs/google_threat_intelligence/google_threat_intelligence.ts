@@ -14,12 +14,16 @@ import {
   GetFileMitreAttackTechniquesInputSchema,
   GetIpReportInputSchema,
   GetIpRelationshipInputSchema,
+  GetDomainReportInputSchema,
+  GetDomainRelationshipInputSchema,
 } from './types';
 import type {
   GetFileBehavioursInput,
   GetFileMitreAttackTechniquesInput,
   GetIpReportInput,
   GetIpRelationshipInput,
+  GetDomainReportInput,
+  GetDomainRelationshipInput,
 } from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
@@ -59,8 +63,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
-        'Get file sandbox, MITRE ATT&CK, IP reputation, and IP relationship data from Google ' +
-        'Threat Intelligence',
+        'Get file sandbox behaviour, MITRE ATT&CK, and IOC reputation and relationship data for ' +
+        'IP addresses and domains from Google Threat Intelligence',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -171,6 +175,52 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    getDomainReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a domain name. ' +
+        'Returns the GTI assessment (verdict, threat score, severity), last analysis statistics, ' +
+        'categorisation, WHOIS data, and any tags GTI has applied. Throws when GTI has no record ' +
+        'of the domain at all.',
+      input: GetDomainReportInputSchema,
+      handler: async (ctx, input: GetDomainReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/domains/${encodeURIComponent(input.domain)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getDomainRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to a domain name by relationship type, for example its DNS ' +
+        'resolutions, subdomains, or the files that communicate with it. See the `relationship` ' +
+        'parameter for examples and where to find the full current list. Returns up to 10 related ' +
+        'objects by default; use limit and cursor to page through more.',
+      input: GetDomainRelationshipInputSchema,
+      handler: async (ctx, input: GetDomainRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/domains/${encodeURIComponent(
+              input.domain
+            )}/${encodeURIComponent(input.relationship)}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
@@ -190,6 +240,14 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     '',
     '## IP address relationships',
     '- `getIpRelationship` supports the same limit/cursor paging as `getFileBehaviours`.',
+    '',
+    '## Domain report',
+    '- `getDomainReport` returns the full GTI domain report object as-is; there is no compact or ' +
+      'pruned variant. Use `getDomainRelationship` to traverse related objects such as ' +
+      'resolutions or subdomains.',
+    '',
+    '## Domain relationships',
+    '- `getDomainRelationship` supports the same limit/cursor paging as `getIpRelationship`.',
   ].join('\n'),
 
   test: {
