@@ -20,6 +20,12 @@ import {
   GetUrlRelationshipInputSchema,
   GetFileReportInputSchema,
   GetFileRelationshipInputSchema,
+  ScanUrlInputSchema,
+  GetAnalysisInputSchema,
+  GetUrlScanReportInputSchema,
+  ScanPrivateUrlInputSchema,
+  GetPrivateAnalysisInputSchema,
+  GetPrivateUrlReportInputSchema,
 } from './types';
 import type {
   GetFileBehavioursInput,
@@ -32,6 +38,12 @@ import type {
   GetUrlRelationshipInput,
   GetFileReportInput,
   GetFileRelationshipInput,
+  ScanUrlInput,
+  GetAnalysisInput,
+  GetUrlScanReportInput,
+  ScanPrivateUrlInput,
+  GetPrivateAnalysisInput,
+  GetPrivateUrlReportInput,
 } from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
@@ -76,7 +88,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
         'Get file sandbox behaviour, MITRE ATT&CK, and IOC reputation and relationship data for ' +
-        'IP addresses, domains, URLs, and files from Google Threat Intelligence',
+        'IP addresses, domains, URLs, and files from Google Threat Intelligence, and submit ' +
+        'URLs for public or private scanning',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -329,6 +342,151 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    scanUrl: {
+      isTool: true,
+      description:
+        'Submit a URL to Google Threat Intelligence for a fresh public analysis. Returns an ' +
+        'analysis identifier; pass it to `getAnalysis` to poll for completion, then to ' +
+        '`getUrlScanReport` to retrieve the full report once the analysis finishes. Supply the ' +
+        'URL in its natural form, the same as for `getUrlReport`.',
+      input: ScanUrlInputSchema,
+      handler: async (ctx, input: ScanUrlInput) => {
+        try {
+          const response = await ctx.client.post(
+            `${GTI_API_BASE_URL}/api/v3/urls`,
+            new URLSearchParams({ url: input.url }),
+            { headers: { ...GTI_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded' } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getAnalysis: {
+      isTool: true,
+      description:
+        'Get the status and statistics of a public URL analysis submitted by `scanUrl`. The ' +
+        'response also carries the URL identifier, at `meta.url_info.id`, needed by ' +
+        '`getUrlScanReport` once the analysis reaches a completed state.',
+      input: GetAnalysisInputSchema,
+      handler: async (ctx, input: GetAnalysisInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/analyses/${encodeURIComponent(input.analysisId)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getUrlScanReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a URL that was ' +
+        'submitted through `scanUrl`, using the URL identifier from `getAnalysis` rather than ' +
+        'the URL itself. Wraps the same endpoint as `getUrlReport`, kept as a separate action ' +
+        'because its input is an identifier, not a URL to derive one from.',
+      input: GetUrlScanReportInputSchema,
+      handler: async (ctx, input: GetUrlScanReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/urls/${encodeURIComponent(input.urlId)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    scanPrivateUrl: {
+      isTool: true,
+      description:
+        'Submit a URL to Google Threat Intelligence for a private analysis. Behaves like ' +
+        '`scanUrl` but neither the submitted URL nor the resulting analysis is shared with the ' +
+        'wider Google Threat Intelligence community. Returns an analysis identifier; pass it to ' +
+        '`getPrivateAnalysis` to poll for completion, then to `getPrivateUrlReport` to retrieve ' +
+        'the full report once the analysis finishes.',
+      input: ScanPrivateUrlInputSchema,
+      handler: async (ctx, input: ScanPrivateUrlInput) => {
+        try {
+          const body: Record<string, string> = { url: input.url };
+          if (input.userAgent !== undefined) body.user_agent = input.userAgent;
+          if (input.sandboxes !== undefined) body.sandboxes = input.sandboxes;
+          if (input.retentionPeriodDays !== undefined) {
+            body.retention_period_days = String(input.retentionPeriodDays);
+          }
+          if (input.storageRegion !== undefined) body.storage_region = input.storageRegion;
+          if (input.interactionSandbox !== undefined) {
+            body.interaction_sandbox = input.interactionSandbox;
+          }
+          if (input.interactionTimeout !== undefined) {
+            body.interaction_timeout = String(input.interactionTimeout);
+          }
+          const response = await ctx.client.post(
+            `${GTI_API_BASE_URL}/api/v3/private/urls`,
+            new URLSearchParams(body),
+            { headers: { ...GTI_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded' } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getPrivateAnalysis: {
+      isTool: true,
+      description:
+        'Get the status and statistics of a private URL analysis submitted by ' +
+        '`scanPrivateUrl`. Once the analysis reaches a completed state, retrieve the full ' +
+        'report with `getPrivateUrlReport`.',
+      input: GetPrivateAnalysisInputSchema,
+      handler: async (ctx, input: GetPrivateAnalysisInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/private/analyses/${encodeURIComponent(input.analysisId)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getPrivateUrlReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a URL that was ' +
+        'submitted through `scanPrivateUrl`, using the URL identifier from `getPrivateAnalysis` ' +
+        'rather than the URL itself.',
+      input: GetPrivateUrlReportInputSchema,
+      handler: async (ctx, input: GetPrivateUrlReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/private/urls/${encodeURIComponent(input.urlId)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
@@ -373,6 +531,37 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     '',
     '## File relationships',
     '- `getFileRelationship` supports the same limit/cursor paging as `getIpRelationship`.',
+    '',
+    '## Scan URL',
+    '- `scanUrl` submits a URL for public analysis and returns an analysis identifier. Pass ' +
+      'it to `getAnalysis` to poll for completion, then to `getUrlScanReport` to retrieve the ' +
+      'full report.',
+    '',
+    '## Get analysis',
+    '- `getAnalysis` polls a public analysis identifier from `scanUrl` until its status is ' +
+      'completed. The response also carries the URL identifier, at `meta.url_info.id`, ' +
+      'needed by `getUrlScanReport`. Re-invoke `getAnalysis` at an interval until the ' +
+      'analysis completes; this connector does not poll on its own.',
+    '',
+    '## Get URL scan report',
+    '- `getUrlScanReport` retrieves the full report for a URL submitted through `scanUrl`, ' +
+      'using the identifier from `getAnalysis` rather than the URL itself.',
+    '',
+    '## Scan private URL',
+    '- `scanPrivateUrl` behaves like `scanUrl`, but neither the submitted URL nor the ' +
+      'resulting analysis is shared with the wider Google Threat Intelligence community. ' +
+      'Accepts optional sandbox selection, retention period, storage region, and ' +
+      'interactive-analysis parameters.',
+    '',
+    '## Get private analysis',
+    '- `getPrivateAnalysis` polls a private analysis identifier from `scanPrivateUrl` the ' +
+      'same way `getAnalysis` polls a public one, including the same `meta.url_info.id` ' +
+      'field for the next step.',
+    '',
+    '## Get private URL report',
+    '- `getPrivateUrlReport` retrieves the full report for a URL submitted through ' +
+      '`scanPrivateUrl`, using the identifier from `getPrivateAnalysis` rather than the URL ' +
+      'itself.',
   ].join('\n'),
 
   test: {

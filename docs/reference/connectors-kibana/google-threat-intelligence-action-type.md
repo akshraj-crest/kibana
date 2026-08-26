@@ -1,7 +1,7 @@
 ---
 navigation_title: "Google threat intelligence"
 type: reference
-description: "Use the Google threat intelligence connector to retrieve file sandbox behaviour reports, MITRE ATT&CK technique mappings, and IP address, domain, URL, and file reputation and relationship data from Google Threat Intelligence."
+description: "Use the Google threat intelligence connector to retrieve file sandbox behaviour reports, MITRE ATT&CK technique mappings, IP address, domain, URL, and file reputation and relationship data, and to submit URLs for public or private scanning, with Google Threat Intelligence."
 applies_to:
   stack: preview 9.6
   serverless: preview
@@ -9,7 +9,7 @@ applies_to:
 
 # Google threat intelligence connector [google-threat-intelligence-action-type]
 
-The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings for a file hash, and reputation reports and related objects for an IP address, domain name, URL, or file hash.
+The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings for a file hash, reputation reports and related objects for an IP address, domain name, URL, or file hash, and to submit URLs for public or private scanning.
 
 ## Create connectors in {{kib}} [define-google-threat-intelligence-ui]
 
@@ -84,7 +84,39 @@ Get File Relationship
     - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
-Get File Behaviours, Get File MITRE ATT&CK Techniques, and Get File Report all throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report. Get Domain Report and Get URL Report, by contrast, do throw for a domain or URL GTI has no record of at all, the same as the file actions. Get IP Relationship, Get Domain Relationship, Get URL Relationship, and Get File Relationship all throw when the relationship type is not one GTI currently recognizes for that object type.
+Scan URL
+:   Submit a URL to Google Threat Intelligence for a fresh public analysis. Returns an analysis identifier; pass it to Get Analysis to poll for completion, then to Get URL Scan Report to retrieve the full report once the analysis finishes.
+    - **URL** (required): URL to submit for analysis, in its natural form, the same as for Get URL Report.
+
+Get Analysis
+:   Retrieve the status and statistics of a public URL analysis submitted by Scan URL. The response also carries the URL identifier needed by Get URL Scan Report once the analysis reaches a completed state.
+    - **Analysis ID** (required): Analysis identifier returned by Scan URL.
+
+Get URL Scan Report
+:   Retrieve the Google Threat Intelligence reputation and detection report for a URL that was submitted through Scan URL, using the URL identifier from Get Analysis rather than the URL itself. Wraps the same endpoint as Get URL Report, kept as a separate action because its input is an identifier rather than a URL to derive one from.
+    - **URL ID** (required): URL identifier taken from the `meta.url_info.id` field of the Get Analysis response. Not derived by this action.
+
+Scan Private URL
+:   Submit a URL to Google Threat Intelligence for a private analysis. Behaves like Scan URL, but neither the submitted URL nor the resulting analysis is shared with the wider Google Threat Intelligence community. Returns an analysis identifier; pass it to Get Private Analysis to poll for completion, then to Get Private URL Report to retrieve the full report once the analysis finishes.
+    - **URL** (required): URL to submit for private analysis.
+    - **User agent** (optional): User-Agent string to present when retrieving the URL.
+    - **Sandboxes** (optional): Comma separated list of sandboxes to detonate in, for example `chrome_headless_linux`, `cape_win`, or `zenbox_windows`.
+    - **Retention period days** (optional): Number of days the analysis is retained. Minimum 1, maximum 28. Defaults to 1 if omitted.
+    - **Storage region** (optional): Region in which the analysis is stored, for example `US`, `CA`, `EU`, or `GB`.
+    - **Interaction sandbox** (optional): Sandbox used for interactive analysis, for example `cape_win`. Defaults to `cape_win` if omitted.
+    - **Interaction timeout** (optional): Interactive analysis duration in seconds. Minimum 60, maximum 1800. Defaults to 60 if omitted.
+
+Get Private Analysis
+:   Retrieve the status and statistics of a private URL analysis submitted by Scan Private URL. Once the analysis reaches a completed state, retrieve the full report with Get Private URL Report.
+    - **Analysis ID** (required): Analysis identifier returned by Scan Private URL.
+
+Get Private URL Report
+:   Retrieve the Google Threat Intelligence reputation and detection report for a URL that was submitted through Scan Private URL, using the URL identifier from Get Private Analysis rather than the URL itself.
+    - **URL ID** (required): URL identifier taken from the `meta.url_info.id` field of the Get Private Analysis response. Not derived by this action.
+
+Get File Behaviours, Get File MITRE ATT&CK Techniques, and Get File Report all throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report. Get Domain Report and Get URL Report, by contrast, do throw for a domain or URL GTI has no record of at all, the same as the file actions. Get IP Relationship, Get Domain Relationship, Get URL Relationship, and Get File Relationship all throw when the relationship type is not one GTI currently recognizes for that object type. Get Analysis, Get URL Scan Report, Get Private Analysis, and Get Private URL Report throw when the analysis or URL identifier is not one GTI recognizes.
+
+Scanning a URL, public or private, is asynchronous: submit it with Scan URL or Scan Private URL, then re-invoke Get Analysis or Get Private Analysis at an interval until its status is completed, before calling Get URL Scan Report or Get Private URL Report. The connector does not poll on its own; the calling workflow or agent is responsible for the retry loop.
 
 ## Connector networking configuration [google-threat-intelligence-connector-networking-configuration]
 

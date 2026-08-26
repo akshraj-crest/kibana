@@ -219,3 +219,106 @@ export const GetFileRelationshipInputSchema = lazySchema(() =>
   })
 );
 export type GetFileRelationshipInput = z.infer<typeof GetFileRelationshipInputSchema>;
+
+export const ScanUrlInputSchema = lazySchema(() =>
+  z.object({
+    url: URL_SCHEMA,
+  })
+);
+export type ScanUrlInput = z.infer<typeof ScanUrlInputSchema>;
+
+export const GetAnalysisInputSchema = lazySchema(() =>
+  z.object({
+    analysisId: z
+      .string()
+      .max(512)
+      .describe('Analysis identifier returned by the `scanUrl` action.'),
+  })
+);
+export type GetAnalysisInput = z.infer<typeof GetAnalysisInputSchema>;
+
+export const GetUrlScanReportInputSchema = lazySchema(() =>
+  z.object({
+    urlId: z
+      .string()
+      .max(512)
+      .describe(
+        'URL identifier to retrieve the report for, taken from `meta.url_info.id` in the ' +
+          '`getAnalysis` response. Not derived by this action.'
+      ),
+  })
+);
+export type GetUrlScanReportInput = z.infer<typeof GetUrlScanReportInputSchema>;
+
+export const ScanPrivateUrlInputSchema = lazySchema(() =>
+  z.object({
+    url: URL_SCHEMA,
+    userAgent: z
+      .string()
+      .max(512)
+      .optional()
+      .describe('User-Agent string to present when retrieving the URL.'),
+    sandboxes: z
+      .string()
+      .max(200)
+      .optional()
+      .describe(
+        'Comma separated list of sandboxes to detonate in, e.g. "chrome_headless_linux", ' +
+          '"cape_win", or "zenbox_windows".'
+      ),
+    retentionPeriodDays: z
+      .number()
+      .int()
+      .min(1)
+      .max(28)
+      .optional()
+      .describe(
+        'Number of days the analysis is retained. Minimum 1, maximum 28. Defaults to 1 if omitted.'
+      ),
+    storageRegion: z
+      .string()
+      .max(100)
+      .optional()
+      .describe('Region in which the analysis is stored, e.g. "US", "CA", "EU", or "GB".'),
+    interactionSandbox: z
+      .string()
+      .max(100)
+      .optional()
+      .describe(
+        'Sandbox used for interactive analysis, e.g. "cape_win". Defaults to "cape_win" if omitted.'
+      ),
+    interactionTimeout: z
+      .number()
+      .int()
+      .min(60)
+      .max(1800)
+      .optional()
+      .describe(
+        'Interactive analysis duration in seconds. Minimum 60, maximum 1800. Defaults to 60 if omitted.'
+      ),
+  })
+);
+export type ScanPrivateUrlInput = z.infer<typeof ScanPrivateUrlInputSchema>;
+
+export const GetPrivateAnalysisInputSchema = lazySchema(() =>
+  z.object({
+    analysisId: z
+      .string()
+      .max(512)
+      .describe('Analysis identifier returned by the `scanPrivateUrl` action.'),
+  })
+);
+export type GetPrivateAnalysisInput = z.infer<typeof GetPrivateAnalysisInputSchema>;
+
+export const GetPrivateUrlReportInputSchema = lazySchema(() =>
+  z.object({
+    urlId: z
+      .string()
+      .max(512)
+      .describe(
+        'URL identifier to retrieve the private report for, taken from the ' +
+          '`getPrivateAnalysis` response. Not derived by this action.'
+      ),
+  })
+);
+export type GetPrivateUrlReportInput = z.infer<typeof GetPrivateUrlReportInputSchema>;
