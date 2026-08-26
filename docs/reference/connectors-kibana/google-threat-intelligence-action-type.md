@@ -33,7 +33,7 @@ The Google threat intelligence connector has the following actions:
 Get File Behaviours
 :   Retrieve sandbox detonation reports for a file by hash. Each report covers one sandbox run: process tree, files, registry keys and network activity it touched, plus the verdict. Returns an empty collection when the hash is known to GTI but has not been sandboxed.
     - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
-    - **Limit** (optional): Maximum number of behaviour reports to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
+    - **Limit** (optional): Maximum number of behaviour reports to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get File MITRE ATT&CK Techniques
@@ -48,7 +48,7 @@ Get IP Relationship
 :   Retrieve objects related to an IP address by relationship type, for example files that communicate with it, URLs hosted on it, or its historical DNS resolutions. Refer to the [IP address object relationships](https://gtidocs.virustotal.com/reference/ip-object#relationships) reference for the full set of supported relationship types.
     - **IP address** (required): IPv4 or IPv6 address to look up.
     - **Relationship** (required): A relationship type published for IP address objects (for example `communicating_files`, `resolutions`, `urls`).
-    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
+    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get Domain Report
@@ -59,7 +59,7 @@ Get Domain Relationship
 :   Retrieve objects related to a domain name by relationship type, for example its DNS resolutions, subdomains, or the files that communicate with it. Refer to the [domain object relationships](https://gtidocs.virustotal.com/reference/domains-object#relationships) reference for the full set of supported relationship types.
     - **Domain** (required): Domain name to look up.
     - **Relationship** (required): A relationship type published for domain objects (for example `resolutions`, `subdomains`, `communicating_files`).
-    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
+    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get URL Report
@@ -70,7 +70,7 @@ Get URL Relationship
 :   Retrieve objects related to a URL by relationship type, for example the files downloaded from it, the domains and IP addresses it contacts, or the URLs it redirects to. Refer to the [URL object relationships](https://gtidocs.virustotal.com/reference/url-object#relationships) reference for the full set of supported relationship types.
     - **URL** (required): URL to look up, in its natural form, the same as for Get URL Report.
     - **Relationship** (required): A relationship type published for URL objects (for example `downloaded_files`, `contacted_domains`, `redirects_to`).
-    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
+    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get File Report
@@ -81,10 +81,10 @@ Get File Relationship
 :   Retrieve objects related to a file by hash by relationship type, for example the domains and IP addresses contacted during detonation, dropped files, or similar files. Refer to the [file object relationships](https://gtidocs.virustotal.com/reference/file-object#relationships) reference for the full set of supported relationship types.
     - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
     - **Relationship** (required): A relationship type published for file objects (for example `contacted_domains`, `dropped_files`, `similar_files`).
-    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted.
+    - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
-Get File Behaviours, Get File MITRE ATT&CK Techniques, and Get File Report all throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report. Get Domain Report and Get URL Report, by contrast, do throw for a domain or URL GTI has no record of at all, the same as the file actions. Get IP Relationship, Get Domain Relationship, Get URL Relationship, and Get File Relationship all throw when the relationship type is not one GTI currently recognizes for that object type.
+Get File Behaviours, Get File MITRE ATT&CK Techniques, and Get File Report all throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report. Get Domain Report and Get URL Report, by contrast, do throw for a domain or URL GTI has no record of at all, the same as the file actions. Get IP Relationship, Get Domain Relationship, Get URL Relationship, and Get File Relationship all throw when the relationship type is not one GTI currently recognises for that object type.
 
 ## Connector networking configuration [google-threat-intelligence-connector-networking-configuration]
 

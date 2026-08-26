@@ -266,6 +266,14 @@ describe('GoogleThreatIntelligenceConnector', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects an empty relationship string at the schema level, before the handler runs', () => {
+      const result = GetIpRelationshipInputSchema.safeParse({
+        ipAddress: '8.8.8.8',
+        relationship: '',
+      });
+      expect(result.success).toBe(false);
+    });
+
     it('accepts a couple of representative relationship values', () => {
       expect(
         GetIpRelationshipInputSchema.safeParse({
@@ -445,6 +453,14 @@ describe('GoogleThreatIntelligenceConnector', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects an empty relationship string at the schema level, before the handler runs', () => {
+      const result = GetDomainRelationshipInputSchema.safeParse({
+        domain: 'example.com',
+        relationship: '',
+      });
+      expect(result.success).toBe(false);
+    });
+
     it('accepts a couple of representative relationship values', () => {
       expect(
         GetDomainRelationshipInputSchema.safeParse({
@@ -604,6 +620,14 @@ describe('GoogleThreatIntelligenceConnector', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects an empty relationship string at the schema level, before the handler runs', () => {
+      const result = GetUrlRelationshipInputSchema.safeParse({
+        url: 'https://example.com/path',
+        relationship: '',
+      });
+      expect(result.success).toBe(false);
+    });
+
     it('accepts a couple of representative relationship values', () => {
       expect(
         GetUrlRelationshipInputSchema.safeParse({
@@ -744,6 +768,14 @@ describe('GoogleThreatIntelligenceConnector', () => {
       const result = GetFileRelationshipInputSchema.safeParse({
         fileHash: 'test',
         relationship: 'dropped_files',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an empty relationship string at the schema level, before the handler runs', () => {
+      const result = GetFileRelationshipInputSchema.safeParse({
+        fileHash: SHA256_HASH,
+        relationship: '',
       });
       expect(result.success).toBe(false);
     });

@@ -170,7 +170,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         'that communicate with it, URLs hosted on it, or its historical DNS resolutions. See the ' +
         '`relationship` parameter for examples and where to find the full current list. Returns up ' +
         'to 10 related objects by default; use limit and cursor to page through more. Throws when ' +
-        'the relationship type is not one GTI currently recognizes for IP objects.',
+        'the relationship type is not one GTI currently recognises for IP objects.',
       input: GetIpRelationshipInputSchema,
       handler: async (ctx, input: GetIpRelationshipInput) => {
         try {
