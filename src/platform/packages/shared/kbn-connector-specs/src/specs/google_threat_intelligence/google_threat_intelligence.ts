@@ -582,8 +582,6 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
           throw new Error(
             'This API key does not have an Enterprise subscription. Use a key from an account ' +
               'with the GTI Enterprise subscription tier.'
-            'This API key does not have an Enterprise subscription. Use a key from an account ' +
-              'with the GTI Enterprise subscription tier.'
           );
         }
         return {};
