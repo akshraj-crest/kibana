@@ -9,8 +9,30 @@
 
 import { i18n } from '@kbn/i18n';
 import type { ConnectorSpec } from '../../connector_spec';
-import { GetFileBehavioursInputSchema, GetFileMitreAttackTechniquesInputSchema } from './types';
-import type { GetFileBehavioursInput, GetFileMitreAttackTechniquesInput } from './types';
+import {
+  GetFileBehavioursInputSchema,
+  GetFileMitreAttackTechniquesInputSchema,
+  GetIpReportInputSchema,
+  GetIpRelationshipInputSchema,
+  GetDomainReportInputSchema,
+  GetDomainRelationshipInputSchema,
+  GetUrlReportInputSchema,
+  GetUrlRelationshipInputSchema,
+  GetFileReportInputSchema,
+  GetFileRelationshipInputSchema,
+} from './types';
+import type {
+  GetFileBehavioursInput,
+  GetFileMitreAttackTechniquesInput,
+  GetIpReportInput,
+  GetIpRelationshipInput,
+  GetDomainReportInput,
+  GetDomainRelationshipInput,
+  GetUrlReportInput,
+  GetUrlRelationshipInput,
+  GetFileReportInput,
+  GetFileRelationshipInput,
+} from './types';
 
 const GTI_API_BASE_URL = 'https://www.virustotal.com';
 const GTI_HEADERS = { 'x-tool': 'Elastic' };
@@ -43,13 +65,18 @@ function throwGtiError(error: unknown): void {
   throw new Error(`GTI API error (${response?.status ?? 'unknown'}): ${detail}`);
 }
 
+function toGtiUrlId(url: string): string {
+  return Buffer.from(url, 'utf-8').toString('base64url');
+}
+
 export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
   metadata: {
     id: '.google_threat_intelligence',
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
-        'Get file sandbox behaviour reports and MITRE ATT&CK technique mappings from Google Threat Intelligence',
+        'Get sandbox behavior, MITRE ATT&CK, and IOC reputation/relationship data for IPs, ' +
+        'domains, URLs, and files',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -60,7 +87,21 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       {
         type: 'api_key_header',
         defaults: { headerField: 'x-apikey' },
-        overrides: { meta: { 'x-apikey': { placeholder: 'gti-...' } } },
+        overrides: {
+          meta: {
+            'x-apikey': {
+              placeholder: 'gti-...',
+              helpText: i18n.translate(
+                'connectorSpecs.googleThreatIntelligence.auth.apiKey.helpText',
+                {
+                  defaultMessage:
+                    'The key must belong to an account with the GTI Enterprise subscription tier; ' +
+                    'a key without that entitlement fails the Test connector check.',
+                }
+              ),
+            },
+          },
+        },
       },
     ],
   },
@@ -111,18 +152,230 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         }
       },
     },
+
+    getIpReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for an IP address (IPv4 ' +
+        'or IPv6). Returns the GTI assessment (verdict, threat score, severity), last analysis ' +
+        'statistics, network ownership and geolocation where available, WHOIS data, and any tags GTI ' +
+        'has applied. Succeeds for any well-formed IP address, even one with no real internet ' +
+        'presence such as a private or reserved address.',
+      input: GetIpReportInputSchema,
+      handler: async (ctx, input: GetIpReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/ip_addresses/${encodeURIComponent(input.ipAddress)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getIpRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to an IP address (IPv4 or IPv6) by relationship type, for example files ' +
+        'that communicate with it, URLs hosted on it, or its historical DNS resolutions. See the ' +
+        '`relationship` parameter for examples and where to find the full current list. Returns up ' +
+        'to 10 related objects by default; use limit and cursor to page through more.',
+      input: GetIpRelationshipInputSchema,
+      handler: async (ctx, input: GetIpRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/ip_addresses/${encodeURIComponent(
+              input.ipAddress
+            )}/${encodeURIComponent(input.relationship)}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getDomainReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a domain name. ' +
+        'Returns the GTI assessment (verdict, threat score, severity), last analysis statistics, ' +
+        'categorization, WHOIS data, and any tags GTI has applied. Throws when GTI has no record ' +
+        'of the domain at all.',
+      input: GetDomainReportInputSchema,
+      handler: async (ctx, input: GetDomainReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/domains/${encodeURIComponent(input.domain)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getDomainRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to a domain name by relationship type, for example its DNS ' +
+        'resolutions, subdomains, or the files that communicate with it. See the `relationship` ' +
+        'parameter for examples and where to find the full current list. Returns up to 10 related ' +
+        'objects by default; use limit and cursor to page through more.',
+      input: GetDomainRelationshipInputSchema,
+      handler: async (ctx, input: GetDomainRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/domains/${encodeURIComponent(
+              input.domain
+            )}/${encodeURIComponent(input.relationship)}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getUrlReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a URL. Returns ' +
+        'the GTI assessment (verdict, threat score, severity), last analysis statistics, ' +
+        'categorization, and the final resolved destination after any redirects. Supply the URL ' +
+        'in its natural form; the action derives the identifier GTI uses internally. Throws when ' +
+        'GTI has no record of the URL at all.',
+      input: GetUrlReportInputSchema,
+      handler: async (ctx, input: GetUrlReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/urls/${toGtiUrlId(input.url)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getUrlRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to a URL by relationship type, for example the files downloaded ' +
+        'from it, the domains and IP addresses it contacts, or the URLs it redirects to. See the ' +
+        '`relationship` parameter for examples and where to find the full current list. Returns ' +
+        'up to 10 related objects by default; use limit and cursor to page through more. Supply ' +
+        'the URL in its natural form, the same as for `getUrlReport`.',
+      input: GetUrlRelationshipInputSchema,
+      handler: async (ctx, input: GetUrlRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/urls/${toGtiUrlId(input.url)}/${encodeURIComponent(
+              input.relationship
+            )}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getFileReport: {
+      isTool: true,
+      description:
+        'Get the Google Threat Intelligence reputation and detection report for a file by hash ' +
+        '(SHA-256, SHA-1, or MD5). Returns the GTI assessment (verdict, threat score, severity), ' +
+        'last analysis statistics, file type metadata, and popular threat classification. This is ' +
+        'a different action from `getFileBehaviours`, which returns sandbox detonation reports ' +
+        'rather than the reputation report. Throws when GTI has no record of the hash at all.',
+      input: GetFileReportInputSchema,
+      handler: async (ctx, input: GetFileReportInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/files/${encodeURIComponent(input.fileHash)}`,
+            { headers: GTI_HEADERS }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
+
+    getFileRelationship: {
+      isTool: true,
+      description:
+        'Get objects related to a file by hash (SHA-256, SHA-1, or MD5) by relationship type, ' +
+        'for example the domains and IP addresses contacted during detonation, dropped files, or ' +
+        'similar files. See the `relationship` parameter for examples and where to find the full ' +
+        'current list. Returns up to 10 related objects by default; use limit and cursor to page ' +
+        'through more.',
+      input: GetFileRelationshipInputSchema,
+      handler: async (ctx, input: GetFileRelationshipInput) => {
+        try {
+          const response = await ctx.client.get(
+            `${GTI_API_BASE_URL}/api/v3/files/${encodeURIComponent(
+              input.fileHash
+            )}/${encodeURIComponent(input.relationship)}`,
+            { headers: GTI_HEADERS, params: { limit: input.limit, cursor: input.cursor } }
+          );
+          return response.data;
+        } catch (error: unknown) {
+          throwGtiError(error);
+          throw error;
+        }
+      },
+    },
   },
 
   skill: [
     '## Google Threat Intelligence connector',
     '',
-    '## File sandbox behaviour',
-    '- `getFileBehaviours` supports paging: pass `limit` (0-40, defaults to 10) to bound the response ' +
-      'size, and pass the `cursor` from a previous response to fetch the next page.',
+    '## Choosing report vs. relationship vs. sandbox actions',
+    '- For a quick reputation/verdict check on an IP, domain, URL, or file hash, use the matching ' +
+      '`get*Report` action. To traverse what an IOC is connected to (resolutions, contacted files, ' +
+      'downloaded files, redirects, and similar), use the matching `get*Relationship` action ' +
+      'instead. For file hashes specifically, `getFileReport` (reputation) is distinct from ' +
+      '`getFileBehaviours` (sandbox detonation reports) and `getFileMitreAttackTechniques` (ATT&CK ' +
+      'techniques observed during detonation); all three can be called for the same hash and ' +
+      'return different things.',
     '',
-    '## MITRE ATT&CK techniques',
-    '- `getFileMitreAttackTechniques` groups tactics, techniques, and signatures by sandbox name, not ' +
-      'as a flat list. The same file can show a different ATT&CK tree per sandbox it was detonated in.',
+    '## Whether a report action throws for an unknown IOC differs by type',
+    '- `getDomainReport`, `getUrlReport`, `getFileReport`, `getFileBehaviours`, and ' +
+      '`getFileMitreAttackTechniques` all throw when GTI has no record of the identifier at all. ' +
+      '`getIpReport` does not: it succeeds for any well-formed IP address, even private or ' +
+      'reserved ones with no real internet presence.',
+    '',
+    '## Relationship names are not enumerated by this connector',
+    '- Do not guess a `relationship` value from a sibling IOC type; the valid set differs per ' +
+      'object type and GTI can add or remove values over time. An unrecognized value throws a 404 ' +
+      'from GTI itself, not a schema error. See each `relationship` parameter description for a ' +
+      'link to the current published set for that IOC type.',
+    '',
+    '## URL identifiers are exact-string, not normalized',
+    "- `getUrlReport` and `getUrlRelationship` derive GTI's identifier as the base64url encoding " +
+      'of the URL exactly as supplied. Scheme, "www.", and a trailing slash all change the ' +
+      'identifier, so "http://example.com" and "https://www.example.com/" are different lookups ' +
+      'even if they resolve to the same site.',
+    '',
+    '## Pagination',
+    '- `getFileBehaviours` and every `get*Relationship` action share the same limit/cursor pattern; ' +
+      "see each action's own `limit` parameter description for the exact bounds.",
   ].join('\n'),
 
   test: {
@@ -140,7 +393,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         const hasGtiAssessment = Boolean(response.data?.data?.attributes?.gti_assessment);
         if (!hasGtiAssessment) {
           throw new Error(
-            'Your Google Threat Intelligence API Key does not have an Enterprise subscription. Verify your GTI subscription tier.'
+            'This API key does not have an Enterprise subscription. Use a key from an account ' +
+              'with the GTI Enterprise subscription tier.'
           );
         }
         return {};
