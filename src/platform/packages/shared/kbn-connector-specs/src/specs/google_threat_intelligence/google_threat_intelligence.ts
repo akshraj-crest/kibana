@@ -81,6 +81,10 @@ function toGtiUrlId(url: string): string {
   return Buffer.from(url, 'utf-8').toString('base64url');
 }
 
+function toGtiUrlId(url: string): string {
+  return Buffer.from(url, 'utf-8').toString('base64url');
+}
+
 export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
   metadata: {
     id: '.google_threat_intelligence',
@@ -99,6 +103,21 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       {
         type: 'api_key_header',
         defaults: { headerField: 'x-apikey' },
+        overrides: {
+          meta: {
+            'x-apikey': {
+              placeholder: 'gti-...',
+              helpText: i18n.translate(
+                'connectorSpecs.googleThreatIntelligence.auth.apiKey.helpText',
+                {
+                  defaultMessage:
+                    'The key must belong to an account with the GTI Enterprise subscription tier; ' +
+                    'a key without that entitlement fails the Test connector check.',
+                }
+              ),
+            },
+          },
+        },
         overrides: {
           meta: {
             'x-apikey': {
@@ -561,6 +580,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         const hasGtiAssessment = Boolean(response.data?.data?.attributes?.gti_assessment);
         if (!hasGtiAssessment) {
           throw new Error(
+            'This API key does not have an Enterprise subscription. Use a key from an account ' +
+              'with the GTI Enterprise subscription tier.'
             'This API key does not have an Enterprise subscription. Use a key from an account ' +
               'with the GTI Enterprise subscription tier.'
           );

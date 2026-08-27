@@ -74,6 +74,7 @@ describe('GoogleThreatIntelligenceConnector', () => {
     });
 
     it('throws on API/network failure, same as every action (see "GTI API error handling" below)', async () => {
+    it('throws on API/network failure, same as every action (see "GTI API error handling" below)', async () => {
       mockClient.get.mockRejectedValue(new Error('ECONNREFUSED'));
 
       await expect(GoogleThreatIntelligenceConnector.test.handler(mockContext)).rejects.toThrow(
@@ -87,6 +88,11 @@ describe('GoogleThreatIntelligenceConnector', () => {
 
     it('rejects a malformed hash at the schema level, before the handler runs', () => {
       const result = GetFileBehavioursInputSchema.safeParse({ fileHash: 'test' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a hash longer than 64 characters at the schema level', () => {
+      const result = GetFileBehavioursInputSchema.safeParse({ fileHash: `${SHA256_HASH}a` });
       expect(result.success).toBe(false);
     });
 
