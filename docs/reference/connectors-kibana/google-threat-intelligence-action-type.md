@@ -1,7 +1,7 @@
 ---
 navigation_title: "Google threat intelligence"
 type: reference
-description: "Use the Google threat intelligence connector to retrieve file sandbox behaviour reports, MITRE ATT&CK technique mappings, and IP address, domain, URL, and file reputation and relationship data from Google Threat Intelligence."
+description: "Use the Google threat intelligence connector to retrieve file sandbox behavior reports, MITRE ATT&CK mappings, and reputation and relationship data for IP addresses, domains, URLs, and files."
 applies_to:
   stack: preview 9.6
   serverless: preview
@@ -9,7 +9,7 @@ applies_to:
 
 # Google threat intelligence connector [google-threat-intelligence-action-type]
 
-The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behaviour reports and MITRE ATT&CK technique mappings for a file hash, and reputation reports and related objects for an IP address, domain name, URL, or file hash.
+The Google threat intelligence connector communicates with the [Google Threat Intelligence (GTI) API](https://gtidocs.virustotal.com/reference/api-overview) to retrieve file sandbox behavior reports and MITRE ATT&CK technique mappings for a file hash, and reputation reports and related objects for an IP address, domain name, URL, or file hash.
 
 ## Create connectors in {{kib}} [define-google-threat-intelligence-ui]
 
@@ -33,7 +33,7 @@ The Google threat intelligence connector has the following actions:
 Get File Behaviours
 :   Retrieve sandbox detonation reports for a file by hash. Each report covers one sandbox run: process tree, files, registry keys and network activity it touched, plus the verdict. Returns an empty collection when the hash is known to GTI but has not been sandboxed.
     - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
-    - **Limit** (optional): Maximum number of behaviour reports to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
+    - **Limit** (optional): Maximum number of behavior reports to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get File MITRE ATT&CK Techniques
@@ -41,7 +41,7 @@ Get File MITRE ATT&CK Techniques
     - **File hash** (required): SHA-256, SHA-1, or MD5 hash identifying the file.
 
 Get IP Report
-:   Retrieve the Google Threat Intelligence reputation and detection report for an IP address, including the GTI assessment, last analysis statistics, network ownership and geolocation where available, and WHOIS data. Has not been observed to fail for a well-formed IP address, even a private or reserved one with no real internet presence.
+:   Retrieve the Google Threat Intelligence reputation and detection report for an IP address, including the GTI assessment, last analysis statistics, network ownership and geolocation where available, and WHOIS data. Succeeds for any well-formed IP address, even a private or reserved one with no real internet presence.
     - **IP address** (required): IPv4 or IPv6 address to look up.
 
 Get IP Relationship
@@ -52,7 +52,7 @@ Get IP Relationship
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get Domain Report
-:   Retrieve the Google Threat Intelligence reputation and detection report for a domain name, including the GTI assessment, last analysis statistics, categorisation, and WHOIS data. Throws when GTI has no record of the domain at all.
+:   Retrieve the Google Threat Intelligence reputation and detection report for a domain name, including the GTI assessment, last analysis statistics, categorization, and WHOIS data. Throws when GTI has no record of the domain at all.
     - **Domain** (required): Domain name to look up.
 
 Get Domain Relationship
@@ -63,7 +63,7 @@ Get Domain Relationship
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
 Get URL Report
-:   Retrieve the Google Threat Intelligence reputation and detection report for a URL, including the GTI assessment, last analysis statistics, categorisation, and the final resolved destination after any redirects. Supply the URL in its natural form; the action derives the identifier GTI uses internally. Throws when GTI has no record of the URL at all.
+:   Retrieve the Google Threat Intelligence reputation and detection report for a URL, including the GTI assessment, last analysis statistics, categorization, and the final resolved destination after any redirects. Supply the URL in its natural form; the action derives the identifier GTI uses internally. Throws when GTI has no record of the URL at all.
     - **URL** (required): URL to look up.
 
 Get URL Relationship
@@ -84,7 +84,13 @@ Get File Relationship
     - **Limit** (optional): Maximum number of related objects to retrieve. Minimum 0, maximum 40. Defaults to 10 if omitted; pass 0 to get the total count without retrieving any items.
     - **Cursor** (optional): Continuation cursor from a previous response, used to retrieve the next page of results.
 
-Get File Behaviours, Get File MITRE ATT&CK Techniques, and Get File Report all throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity. Get IP Report has not been observed to have an equivalent "unknown" case: in testing against several IP addresses, including private, reserved, and IPv6 addresses, GTI always returned a populated report. Get Domain Report and Get URL Report, by contrast, do throw for a domain or URL GTI has no record of at all, the same as the file actions. Get IP Relationship, Get Domain Relationship, Get URL Relationship, and Get File Relationship all throw when the relationship type is not one GTI currently recognises for that object type.
+Get File Behaviours, Get File MITRE ATT&CK Techniques, and Get File Report all throw an error when GTI has no record of the hash at all, rather than returning empty data, so a genuinely unknown hash can be distinguished from a known hash with no sandbox activity.
+
+Get Domain Report and Get URL Report throw the same way, for a domain or URL GTI has no record of at all.
+
+Get IP Report is the exception: it succeeds for any well-formed IP address, including private, reserved, and IPv6 addresses with no real internet presence.
+
+Get IP Relationship, Get Domain Relationship, Get URL Relationship, and Get File Relationship all throw when the relationship type is not one GTI currently recognizes for that object type.
 
 ## Connector networking configuration [google-threat-intelligence-connector-networking-configuration]
 

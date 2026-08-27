@@ -43,6 +43,7 @@ const FILE_HASH_RE = /^([a-fA-F0-9]{64}|[a-fA-F0-9]{40}|[a-fA-F0-9]{32})$/;
 
 export const FILE_HASH_SCHEMA = z
   .string()
+  .max(64)
   .regex(FILE_HASH_RE, {
     message:
       'Must be a SHA-256 (64 hex chars), SHA-1 (40 hex chars), or MD5 (32 hex chars) file hash',
@@ -54,7 +55,7 @@ export const FILE_HASH_SCHEMA = z
 export const GetFileBehavioursInputSchema = lazySchema(() =>
   z.object({
     fileHash: FILE_HASH_SCHEMA,
-    limit: pagingLimitSchema('behaviour reports'),
+    limit: pagingLimitSchema('behavior reports'),
     cursor: CURSOR_SCHEMA,
   })
 );

@@ -83,6 +83,11 @@ describe('GoogleThreatIntelligenceConnector', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects a hash longer than 64 characters at the schema level', () => {
+      const result = GetFileBehavioursInputSchema.safeParse({ fileHash: `${SHA256_HASH}a` });
+      expect(result.success).toBe(false);
+    });
+
     it('rejects a limit above 40 at the schema level', () => {
       const result = GetFileBehavioursInputSchema.safeParse({ fileHash: SHA256_HASH, limit: 41 });
       expect(result.success).toBe(false);
