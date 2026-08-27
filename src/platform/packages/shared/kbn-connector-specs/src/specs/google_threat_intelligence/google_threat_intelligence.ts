@@ -87,9 +87,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
     displayName: 'Google Threat Intelligence',
     description: i18n.translate('connectorSpecs.googleThreatIntelligence.metadata.description', {
       defaultMessage:
-        'Get file sandbox behaviour, MITRE ATT&CK, and IOC reputation and relationship data for ' +
-        'IP addresses, domains, URLs, and files from Google Threat Intelligence, and submit ' +
-        'URLs for public or private scanning',
+        'Get sandbox behavior, MITRE ATT&CK, and IOC reputation/relationship data, plus public ' +
+        'and private URL scanning',
     }),
     minimumLicense: 'enterprise',
     supportedFeatureIds: ['workflows', 'agentBuilder'],
@@ -100,7 +99,21 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       {
         type: 'api_key_header',
         defaults: { headerField: 'x-apikey' },
-        overrides: { meta: { 'x-apikey': { placeholder: 'gti-...' } } },
+        overrides: {
+          meta: {
+            'x-apikey': {
+              placeholder: 'gti-...',
+              helpText: i18n.translate(
+                'connectorSpecs.googleThreatIntelligence.auth.apiKey.helpText',
+                {
+                  defaultMessage:
+                    'The key must belong to an account with the GTI Enterprise subscription tier; ' +
+                    'a key without that entitlement fails the Test connector check.',
+                }
+              ),
+            },
+          },
+        },
       },
     ],
   },
@@ -158,9 +171,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         'Get the Google Threat Intelligence reputation and detection report for an IP address (IPv4 ' +
         'or IPv6). Returns the GTI assessment (verdict, threat score, severity), last analysis ' +
         'statistics, network ownership and geolocation where available, WHOIS data, and any tags GTI ' +
-        'has applied. Has not been observed to fail for a well-formed IP address, even one with no ' +
-        'real internet presence such as a private or reserved address; throws when the IP address ' +
-        'itself is malformed.',
+        'has applied. Succeeds for any well-formed IP address, even one with no real internet ' +
+        'presence such as a private or reserved address.',
       input: GetIpReportInputSchema,
       handler: async (ctx, input: GetIpReportInput) => {
         try {
@@ -182,8 +194,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         'Get objects related to an IP address (IPv4 or IPv6) by relationship type, for example files ' +
         'that communicate with it, URLs hosted on it, or its historical DNS resolutions. See the ' +
         '`relationship` parameter for examples and where to find the full current list. Returns up ' +
-        'to 10 related objects by default; use limit and cursor to page through more. Throws when ' +
-        'the relationship type is not one GTI currently recognizes for IP objects.',
+        'to 10 related objects by default; use limit and cursor to page through more.',
       input: GetIpRelationshipInputSchema,
       handler: async (ctx, input: GetIpRelationshipInput) => {
         try {
@@ -206,7 +217,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       description:
         'Get the Google Threat Intelligence reputation and detection report for a domain name. ' +
         'Returns the GTI assessment (verdict, threat score, severity), last analysis statistics, ' +
-        'categorisation, WHOIS data, and any tags GTI has applied. Throws when GTI has no record ' +
+        'categorization, WHOIS data, and any tags GTI has applied. Throws when GTI has no record ' +
         'of the domain at all.',
       input: GetDomainReportInputSchema,
       handler: async (ctx, input: GetDomainReportInput) => {
@@ -252,7 +263,7 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
       description:
         'Get the Google Threat Intelligence reputation and detection report for a URL. Returns ' +
         'the GTI assessment (verdict, threat score, severity), last analysis statistics, ' +
-        'categorisation, and the final resolved destination after any redirects. Supply the URL ' +
+        'categorization, and the final resolved destination after any redirects. Supply the URL ' +
         'in its natural form; the action derives the identifier GTI uses internally. Throws when ' +
         'GTI has no record of the URL at all.',
       input: GetUrlReportInputSchema,
@@ -492,76 +503,47 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
   skill: [
     '## Google Threat Intelligence connector',
     '',
-    '## File sandbox behaviour',
-    '- `getFileBehaviours` supports paging: pass `limit` (0-40, defaults to 10) to bound the response ' +
-      'size, and pass the `cursor` from a previous response to fetch the next page.',
+    '## Choosing report vs. relationship vs. sandbox actions',
+    '- For a quick reputation/verdict check on an IP, domain, URL, or file hash, use the matching ' +
+      '`get*Report` action. To traverse what an IOC is connected to (resolutions, contacted files, ' +
+      'downloaded files, redirects, and similar), use the matching `get*Relationship` action ' +
+      'instead. For file hashes specifically, `getFileReport` (reputation) is distinct from ' +
+      '`getFileBehaviours` (sandbox detonation reports) and `getFileMitreAttackTechniques` (ATT&CK ' +
+      'techniques observed during detonation); all three can be called for the same hash and ' +
+      'return different things.',
     '',
-    '## MITRE ATT&CK techniques',
-    '- `getFileMitreAttackTechniques` groups tactics, techniques, and signatures by sandbox name, not ' +
-      'as a flat list. The same file can show a different ATT&CK tree per sandbox it was detonated in.',
+    '## Whether a report action throws for an unknown IOC differs by type',
+    '- `getDomainReport`, `getUrlReport`, `getFileReport`, `getFileBehaviours`, and ' +
+      '`getFileMitreAttackTechniques` all throw when GTI has no record of the identifier at all. ' +
+      '`getIpReport` does not: it succeeds for any well-formed IP address, even private or ' +
+      'reserved ones with no real internet presence.',
     '',
-    '## IP address report',
-    '- `getIpReport` returns the full GTI report object as-is; there is no compact or pruned variant. ' +
-      'Use `getIpRelationship` to traverse related objects such as communicating files or hosted URLs.',
+    '## Relationship names are not enumerated by this connector',
+    '- Do not guess a `relationship` value from a sibling IOC type; the valid set differs per ' +
+      'object type and GTI can add or remove values over time. An unrecognized value throws a 404 ' +
+      'from GTI itself, not a schema error. See each `relationship` parameter description for a ' +
+      'link to the current published set for that IOC type.',
     '',
-    '## IP address relationships',
-    '- `getIpRelationship` supports the same limit/cursor paging as `getFileBehaviours`.',
+    '## URL identifiers are exact-string, not normalized',
+    "- `getUrlReport` and `getUrlRelationship` derive GTI's identifier as the base64url encoding " +
+      'of the URL exactly as supplied. Scheme, "www.", and a trailing slash all change the ' +
+      'identifier, so "http://example.com" and "https://www.example.com/" are different lookups ' +
+      'even if they resolve to the same site.',
     '',
-    '## Domain report',
-    '- `getDomainReport` returns the full GTI domain report object as-is; there is no compact or ' +
-      'pruned variant. Use `getDomainRelationship` to traverse related objects such as ' +
-      'resolutions or subdomains.',
+    '## Pagination',
+    '- `getFileBehaviours` and every `get*Relationship` action share the same limit/cursor pattern; ' +
+      "see each action's own `limit` parameter description for the exact bounds.",
     '',
-    '## Domain relationships',
-    '- `getDomainRelationship` supports the same limit/cursor paging as `getIpRelationship`.',
+    '## Public vs. private URL scanning',
+    '- `scanUrl` submits a URL for public analysis; `scanPrivateUrl` does the same without sharing ' +
+      'the URL or the resulting analysis with the wider GTI community. Both accept the URL in its ' +
+      'natural form, the same as `getUrlReport`.',
     '',
-    '## URL report',
-    '- `getUrlReport` derives the URL identifier GTI uses internally from the URL you supply; ' +
-      'pass the URL in its natural form, not a pre-encoded identifier.',
-    '',
-    '## URL relationships',
-    '- `getUrlRelationship` takes the same URL and derives the identifier the same way as ' +
-      '`getUrlReport`. It supports the same limit/cursor paging as `getIpRelationship`.',
-    '',
-    '## File report',
-    '- `getFileReport` returns the full GTI file reputation report object as-is, the same shape ' +
-      'as `getIpReport`/`getDomainReport`/`getUrlReport`. It is a different action from ' +
-      '`getFileBehaviours`, which returns sandbox detonation reports rather than the reputation ' +
-      'report.',
-    '',
-    '## File relationships',
-    '- `getFileRelationship` supports the same limit/cursor paging as `getIpRelationship`.',
-    '',
-    '## Scan URL',
-    '- `scanUrl` submits a URL for public analysis and returns an analysis identifier. Pass ' +
-      'it to `getAnalysis` to poll for completion, then to `getUrlScanReport` to retrieve the ' +
-      'full report.',
-    '',
-    '## Get analysis',
-    '- `getAnalysis` polls a public analysis identifier from `scanUrl` until its status is ' +
-      'completed. The response also carries the URL identifier, at `meta.url_info.id`, ' +
-      'needed by `getUrlScanReport`. Re-invoke `getAnalysis` at an interval until the ' +
-      'analysis completes; this connector does not poll on its own.',
-    '',
-    '## Get URL scan report',
-    '- `getUrlScanReport` retrieves the full report for a URL submitted through `scanUrl`, ' +
-      'using the identifier from `getAnalysis` rather than the URL itself.',
-    '',
-    '## Scan private URL',
-    '- `scanPrivateUrl` behaves like `scanUrl`, but neither the submitted URL nor the ' +
-      'resulting analysis is shared with the wider Google Threat Intelligence community. ' +
-      'Accepts optional sandbox selection, retention period, storage region, and ' +
-      'interactive-analysis parameters.',
-    '',
-    '## Get private analysis',
-    '- `getPrivateAnalysis` polls a private analysis identifier from `scanPrivateUrl` the ' +
-      'same way `getAnalysis` polls a public one, including the same `meta.url_info.id` ' +
-      'field for the next step.',
-    '',
-    '## Get private URL report',
-    '- `getPrivateUrlReport` retrieves the full report for a URL submitted through ' +
-      '`scanPrivateUrl`, using the identifier from `getPrivateAnalysis` rather than the URL ' +
-      'itself.',
+    '## Scan results require polling, not a single call',
+    '- `scanUrl`/`scanPrivateUrl` return only an analysis identifier. Poll `getAnalysis`/' +
+      '`getPrivateAnalysis` at an interval until the status is completed; this connector does not ' +
+      'poll on its own. The completed response carries the URL identifier (`meta.url_info.id`) ' +
+      'needed by `getUrlScanReport`/`getPrivateUrlReport`.',
   ].join('\n'),
 
   test: {
@@ -579,7 +561,8 @@ export const GoogleThreatIntelligenceConnector: ConnectorSpec = {
         const hasGtiAssessment = Boolean(response.data?.data?.attributes?.gti_assessment);
         if (!hasGtiAssessment) {
           throw new Error(
-            'Your Google Threat Intelligence API Key does not have an Enterprise subscription. Verify your GTI subscription tier.'
+            'This API key does not have an Enterprise subscription. Use a key from an account ' +
+              'with the GTI Enterprise subscription tier.'
           );
         }
         return {};
