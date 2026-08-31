@@ -20,6 +20,12 @@ import {
   GetUrlRelationshipInputSchema,
   GetFileReportInputSchema,
   GetFileRelationshipInputSchema,
+  ScanUrlInputSchema,
+  GetAnalysisInputSchema,
+  GetUrlScanReportInputSchema,
+  ScanPrivateUrlInputSchema,
+  GetPrivateAnalysisInputSchema,
+  GetPrivateUrlReportInputSchema,
 } from './types';
 
 const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399fa3dc';
@@ -27,6 +33,7 @@ const SHA256_HASH = '25d8ae4678c37251e7ffbaeddc252ae2530ef23f66e4c856d98ef60f399
 describe('GoogleThreatIntelligenceConnector', () => {
   const mockClient = {
     get: jest.fn(),
+    post: jest.fn(),
   };
 
   const mockContext = {
@@ -67,6 +74,7 @@ describe('GoogleThreatIntelligenceConnector', () => {
     });
 
     it('throws on API/network failure, same as every action (see "GTI API error handling" below)', async () => {
+    it('throws on API/network failure, same as every action (see "GTI API error handling" below)', async () => {
       mockClient.get.mockRejectedValue(new Error('ECONNREFUSED'));
 
       await expect(GoogleThreatIntelligenceConnector.test.handler(mockContext)).rejects.toThrow(
@@ -80,6 +88,11 @@ describe('GoogleThreatIntelligenceConnector', () => {
 
     it('rejects a malformed hash at the schema level, before the handler runs', () => {
       const result = GetFileBehavioursInputSchema.safeParse({ fileHash: 'test' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a hash longer than 64 characters at the schema level', () => {
+      const result = GetFileBehavioursInputSchema.safeParse({ fileHash: `${SHA256_HASH}a` });
       expect(result.success).toBe(false);
     });
 
@@ -867,6 +880,297 @@ describe('GoogleThreatIntelligenceConnector', () => {
       await expect(
         handler(mockContext, { fileHash: SHA256_HASH, relationship: 'not_a_real_relationship' })
       ).rejects.toThrow('GTI API error (404): Resource not found.');
+    });
+  });
+
+  describe('scanUrl', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.scanUrl.handler;
+
+    it('rejects a malformed URL at the schema level, before the handler runs', () => {
+      const result = ScanUrlInputSchema.safeParse({ url: 'not-a-url' });
+      expect(result.success).toBe(false);
+    });
+
+    it('submits the URL as a form-urlencoded body and returns the analysis id as-is', async () => {
+      const apiResponse = { data: { type: 'analysis', id: 'u-abc123' } };
+      mockClient.post.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { url: 'https://example.com/' });
+
+      const call = mockClient.post.mock.calls[0];
+      expect(call[0]).toBe('https://www.virustotal.com/api/v3/urls');
+      expect(call[1]).toBeInstanceOf(URLSearchParams);
+      expect((call[1] as URLSearchParams).get('url')).toBe('https://example.com/');
+      expect(call[2]).toMatchObject({
+        headers: { 'x-tool': 'Elastic', 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on API/network failure (see "GTI API error handling" below)', async () => {
+      mockClient.post.mockRejectedValue({
+        response: { status: 400, data: { error: { code: 'BadRequestError' } } },
+      });
+
+      await expect(handler(mockContext, { url: 'https://example.com/' })).rejects.toThrow(
+        'GTI API error (400): BadRequestError'
+      );
+    });
+  });
+
+  describe('getAnalysis', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getAnalysis.handler;
+
+    it('rejects an analysis id above the length bound at the schema level', () => {
+      const result = GetAnalysisInputSchema.safeParse({ analysisId: 'a'.repeat(513) });
+      expect(result.success).toBe(false);
+    });
+
+    it('calls the analyses endpoint with the id and x-tool header, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: {
+          type: 'url_analysis',
+          id: 'u-abc123',
+          attributes: { status: 'completed', stats: { malicious: 0 } },
+        },
+        meta: { url_info: { id: 'the-url-id', url: 'https://example.com/' } },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { analysisId: 'u-abc123' });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe('https://www.virustotal.com/api/v3/analyses/u-abc123');
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (analysis id not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'Analysis "u-abc123" not found' } },
+        },
+      });
+
+      await expect(handler(mockContext, { analysisId: 'u-abc123' })).rejects.toThrow(
+        'GTI API error (404): Analysis "u-abc123" not found'
+      );
+    });
+  });
+
+  describe('getUrlScanReport', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getUrlScanReport.handler;
+
+    it('rejects a URL id above the length bound at the schema level', () => {
+      const result = GetUrlScanReportInputSchema.safeParse({ urlId: 'a'.repeat(513) });
+      expect(result.success).toBe(false);
+    });
+
+    it('calls the URL report endpoint with the id, encoded, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: {
+          type: 'url',
+          id: 'the/url+id',
+          attributes: { url: 'https://example.com/', last_analysis_stats: { malicious: 0 } },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { urlId: 'the/url+id' });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(
+        `https://www.virustotal.com/api/v3/urls/${encodeURIComponent('the/url+id')}`
+      );
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (URL id not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'URL "the-url-id" not found' } },
+        },
+      });
+
+      await expect(handler(mockContext, { urlId: 'the-url-id' })).rejects.toThrow(
+        'GTI API error (404): URL "the-url-id" not found'
+      );
+    });
+  });
+
+  describe('scanPrivateUrl', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.scanPrivateUrl.handler;
+
+    it('rejects a malformed URL at the schema level, before the handler runs', () => {
+      const result = ScanPrivateUrlInputSchema.safeParse({ url: 'not-a-url' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a retentionPeriodDays outside 1-28 at the schema level', () => {
+      expect(
+        ScanPrivateUrlInputSchema.safeParse({
+          url: 'https://example.com/',
+          retentionPeriodDays: 0,
+        }).success
+      ).toBe(false);
+      expect(
+        ScanPrivateUrlInputSchema.safeParse({
+          url: 'https://example.com/',
+          retentionPeriodDays: 29,
+        }).success
+      ).toBe(false);
+    });
+
+    it('rejects an interactionTimeout outside 60-1800 at the schema level', () => {
+      expect(
+        ScanPrivateUrlInputSchema.safeParse({
+          url: 'https://example.com/',
+          interactionTimeout: 59,
+        }).success
+      ).toBe(false);
+      expect(
+        ScanPrivateUrlInputSchema.safeParse({
+          url: 'https://example.com/',
+          interactionTimeout: 1801,
+        }).success
+      ).toBe(false);
+    });
+
+    it('submits only the url when no optional parameters are supplied', async () => {
+      mockClient.post.mockResolvedValue({
+        data: { data: { type: 'private_analysis', id: 'private-id' } },
+      });
+
+      await handler(mockContext, { url: 'https://example.com/' });
+
+      const call = mockClient.post.mock.calls[0];
+      expect(call[0]).toBe('https://www.virustotal.com/api/v3/private/urls');
+      expect(Array.from((call[1] as URLSearchParams).keys())).toEqual(['url']);
+    });
+
+    it('submits every optional parameter as a form-urlencoded body, returning the analysis id as-is', async () => {
+      const apiResponse = { data: { type: 'private_analysis', id: 'private-id' } };
+      mockClient.post.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, {
+        url: 'https://example.com/',
+        userAgent: 'custom-agent/1.0',
+        sandboxes: 'chrome_headless_linux,cape_win',
+        retentionPeriodDays: 7,
+        storageRegion: 'EU',
+        interactionSandbox: 'cape_win',
+        interactionTimeout: 120,
+      });
+
+      const call = mockClient.post.mock.calls[0];
+      expect(call[1]).toBeInstanceOf(URLSearchParams);
+      const body = call[1] as URLSearchParams;
+      expect(body.get('url')).toBe('https://example.com/');
+      expect(body.get('user_agent')).toBe('custom-agent/1.0');
+      expect(body.get('sandboxes')).toBe('chrome_headless_linux,cape_win');
+      expect(body.get('retention_period_days')).toBe('7');
+      expect(body.get('storage_region')).toBe('EU');
+      expect(body.get('interaction_sandbox')).toBe('cape_win');
+      expect(body.get('interaction_timeout')).toBe('120');
+      expect(call[2]).toMatchObject({
+        headers: { 'x-tool': 'Elastic', 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on API/network failure (see "GTI API error handling" below)', async () => {
+      mockClient.post.mockRejectedValue({
+        response: { status: 400, data: { error: { code: 'BadRequestError' } } },
+      });
+
+      await expect(handler(mockContext, { url: 'https://example.com/' })).rejects.toThrow(
+        'GTI API error (400): BadRequestError'
+      );
+    });
+  });
+
+  describe('getPrivateAnalysis', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getPrivateAnalysis.handler;
+
+    it('rejects an analysis id above the length bound at the schema level', () => {
+      const result = GetPrivateAnalysisInputSchema.safeParse({ analysisId: 'a'.repeat(513) });
+      expect(result.success).toBe(false);
+    });
+
+    it('calls the private analyses endpoint with the id and x-tool header, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: {
+          type: 'private_analysis',
+          id: 'private-id',
+          attributes: { status: 'completed' },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { analysisId: 'private-id' });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe('https://www.virustotal.com/api/v3/private/analyses/private-id');
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (analysis id not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'Analysis "private-id" not found' } },
+        },
+      });
+
+      await expect(handler(mockContext, { analysisId: 'private-id' })).rejects.toThrow(
+        'GTI API error (404): Analysis "private-id" not found'
+      );
+    });
+  });
+
+  describe('getPrivateUrlReport', () => {
+    const handler = GoogleThreatIntelligenceConnector.actions.getPrivateUrlReport.handler;
+
+    it('rejects a URL id above the length bound at the schema level', () => {
+      const result = GetPrivateUrlReportInputSchema.safeParse({ urlId: 'a'.repeat(513) });
+      expect(result.success).toBe(false);
+    });
+
+    it('calls the private URL report endpoint with the id, encoded, and returns the response as-is', async () => {
+      const apiResponse = {
+        data: {
+          type: 'private_url',
+          id: 'the/url+id',
+          attributes: { url: 'https://example.com/', private: true },
+        },
+      };
+      mockClient.get.mockResolvedValue({ data: apiResponse });
+
+      const result = await handler(mockContext, { urlId: 'the/url+id' });
+
+      const call = mockClient.get.mock.calls[0];
+      expect(call[0]).toBe(
+        `https://www.virustotal.com/api/v3/private/urls/${encodeURIComponent('the/url+id')}`
+      );
+      expect(call[1]).toMatchObject({ headers: { 'x-tool': 'Elastic' } });
+      expect(result).toEqual(apiResponse);
+    });
+
+    it('throws on a 404 (URL id not recognized by GTI), matching the real API error shape', async () => {
+      mockClient.get.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: { code: 'NotFoundError', message: 'URL "private-url-id" not found' } },
+        },
+      });
+
+      await expect(handler(mockContext, { urlId: 'private-url-id' })).rejects.toThrow(
+        'GTI API error (404): URL "private-url-id" not found'
+      );
     });
   });
 
